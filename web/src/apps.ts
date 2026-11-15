@@ -6,6 +6,7 @@ export const CATEGORIES: readonly { cat: AppCategory; title: string }[] = [
   { cat: 'nav', title: 'Navigation' },
   { cat: 'energy', title: 'Charging & fuel' },
   { cat: 'music', title: 'Music' },
+  { cat: 'video', title: 'Video' },
   { cat: 'social', title: 'Social' },
   { cat: 'work', title: 'Work' },
   { cat: 'other', title: 'Other' },

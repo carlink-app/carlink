@@ -52,7 +52,7 @@ export function writeHeader(h: FrameHeader, out: Uint8Array): void {
 }
 
 /** Launcher group, from the phone (missing on older engines: Other). */
-export type AppCategory = 'nav' | 'energy' | 'music' | 'social' | 'work' | 'other';
+export type AppCategory = 'nav' | 'energy' | 'music' | 'video' | 'social' | 'work' | 'other';
 /** `ih`: hash of the app's icon; the icon itself comes on request (`app-icons`), unless sent inline. */
 export interface AppInfo { pkg: string; cls: string; label: string; icon?: string; ih?: string; cat?: AppCategory }
 

@@ -136,7 +136,7 @@ Phone -> page:
   icons (IndexedDB) and asks for missing or changed ones with `app-icons`
   (up to 400 packages) once video is running; the phone answers in batches
   of 16, 40 ms apart, so the first frames get the link.
-- `apps.cat`: launcher group, `nav` | `energy` | `music` | `social` | `work` | `other`
+- `apps.cat`: launcher group, `nav` | `energy` | `music` | `video` | `social` | `work` | `other`
   (known apps first, then the app's declared category). Missing or unknown
   = `other`. The page shows the groups in that order.
 - `notif.replay`: true on the re-sends after a reconnect (calls in progress and

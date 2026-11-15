@@ -7,10 +7,10 @@ const app = (pkg: string, label: string, cat?: string): AppInfo => ({ pkg, cls: 
 describe('groupApps', () => {
   it('orders groups nav, energy, music, social, work, other and sorts by label', () => {
     const g = groupApps([
-      app('x.notes', 'Notes', 'work'), app('com.waze', 'Waze', 'nav'), app('x.game', 'Game'), app('ps', 'PlugShare', 'energy'),
+      app('x.notes', 'Notes', 'work'), app('com.waze', 'Waze', 'nav'), app('x.game', 'Game'), app('ps', 'PlugShare', 'energy'), app('nf', 'Netflix', 'video'),
       app('com.spotify.music', 'Spotify', 'music'), app('maps', 'Maps', 'nav'), app('tg', 'Telegram', 'social'),
     ]);
-    expect(g.map((x) => x.title)).toEqual(['Navigation', 'Charging & fuel', 'Music', 'Social', 'Work', 'Other']);
+    expect(g.map((x) => x.title)).toEqual(['Navigation', 'Charging & fuel', 'Music', 'Video', 'Social', 'Work', 'Other']);
     expect(g[0].apps.map((a) => a.label)).toEqual(['Maps', 'Waze']);
   });
 

@@ -98,7 +98,11 @@ class AppsCloseTest {
 
     @Test fun declaredSocialAndProductivity() {
         assertEquals("social", Apps.category("x.y", android.content.pm.ApplicationInfo.CATEGORY_SOCIAL))
-        assertEquals("work", Apps.category("x.y", android.content.pm.ApplicationInfo.CATEGORY_PRODUCTIVITY))
+        // Productivity alone isn't work (password managers, browsers...): only known work apps are.
+        assertEquals("other", Apps.category("x.y", android.content.pm.ApplicationInfo.CATEGORY_PRODUCTIVITY))
+        assertEquals("work", Apps.category("com.Slack", android.content.pm.ApplicationInfo.CATEGORY_PRODUCTIVITY))
+        assertEquals("video", Apps.category("com.netflix.mediaclient", android.content.pm.ApplicationInfo.CATEGORY_UNDEFINED))
+        assertEquals("video", Apps.category("x.y", android.content.pm.ApplicationInfo.CATEGORY_VIDEO))
         assertEquals("other", Apps.category("x.y", android.content.pm.ApplicationInfo.CATEGORY_UNDEFINED))
         assertEquals("music", Apps.category("com.spotify.music", android.content.pm.ApplicationInfo.CATEGORY_UNDEFINED))
         assertEquals("work", Apps.category("com.google.android.gm", android.content.pm.ApplicationInfo.CATEGORY_UNDEFINED))

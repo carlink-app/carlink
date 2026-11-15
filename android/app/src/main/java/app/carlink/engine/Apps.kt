@@ -44,10 +44,11 @@ object Apps {
         val out = JSONArray()
         val components = HashSet<Pair<String, String>>()
         val iconsOut = HashMap<String, String>()
+        findCameraApps(pm).let { if (it != cameraApps) Log.i(TAG, "camera apps (blocked in the car): $it"); cameraApps = it }
         for (ri in pm.queryIntentActivities(intent, 0)) {
             val pkg = ri.activityInfo.packageName
             val cls = ri.activityInfo.name
-            if (pkg in HIDDEN) continue
+            if (blocked(pkg)) continue
             try {
                 val icon = icons[pkg] ?: icon(pm, ri) ?: ""
                 val entry = JSONObject().put("pkg", pkg).put("cls", cls).put("label", ri.loadLabel(pm).toString())
@@ -66,7 +67,7 @@ object Apps {
     }
 
     /**
-     * Launcher group for the car: `nav`, `energy`, `music`, `social`, `work` or `other`.
+     * Launcher group for the car: `nav`, `energy`, `music`, `video`, `social`, `work` or `other`.
      * Known apps first (many don't declare a category), then the app's own
      * `android:appCategory`.
      */
@@ -74,7 +75,9 @@ object Apps {
         ApplicationInfo.CATEGORY_MAPS -> "nav"
         ApplicationInfo.CATEGORY_AUDIO -> "music"
         ApplicationInfo.CATEGORY_SOCIAL -> "social"
-        ApplicationInfo.CATEGORY_PRODUCTIVITY -> "work"
+        ApplicationInfo.CATEGORY_VIDEO -> "video"
+        // Not PRODUCTIVITY -> work: password managers, browsers, AI chat and
+        // utilities declare it too. Work is the known list only.
         else -> "other"
     }
 
@@ -105,12 +108,24 @@ object Apps {
         listOf(
             "com.ubercab", "com.ubercab.eats", "ee.mtakso.client", "com.bolt.deliveryclient",
             "com.lyft.android", "com.glovoapp", "com.glovo", "ua.com.uklontaxi", "com.wolt.android", "com.ubercab.driver", "ee.mtakso.driver",
+            "com.google.android.apps.chromecast.app", // Google Home declares "video"
         ).forEach { put(it, "other") }
         listOf(
-            "com.google.android.gm", "com.google.android.calendar", "com.Slack", "com.microsoft.teams",
-            "com.microsoft.office.outlook", "com.google.android.apps.meetings", "us.zoom.videomeetings",
-            "com.google.android.keep", "com.google.android.apps.tasks",
+            "com.Slack", "com.microsoft.teams", "com.microsoft.office.outlook", "com.google.android.gm",
+            "com.google.android.calendar", "me.proton.android.calendar", "com.google.android.apps.meetings",
+            "com.google.android.apps.tachyon", // Meet (formerly Duo)
+            "us.zoom.videomeetings", "com.atlassian.android.jira.core", "com.atlassian.confluence.server",
+            "com.linkedin.android", "com.github.android", "com.figma.mirror", "notion.id", "com.asana.app",
+            "com.trello", "com.clickup.app",
         ).forEach { put(it, "work") }
+        // Video streaming: its own group (watching is for parked/charging).
+        listOf(
+            "com.google.android.youtube", "com.google.android.apps.youtube.kids", "com.netflix.mediaclient",
+            "com.megogo.application", "tv.twitch.android.app", "com.amazon.avod.thirdpartyclient",
+            "com.disney.disneyplus", "com.hbo.hbonow", "com.wbd.stream", "com.kyivstar.tv.mobile",
+            "ua.sweet.tv", "com.plexapp.android", "org.videolan.vlc", "com.google.android.videos",
+            "com.zhiliaoapp.musically", "com.apple.atve.androidtv.appletv", "com.formulaone.production",
+        ).forEach { put(it, "video") }
     }
 
     /** Shell's system context lacks some framework drawables; try the app's own resources. */
@@ -152,9 +167,33 @@ object Apps {
 
     private val VALID_NAME = Regex("^[A-Za-z0-9_.$]+$")
 
+    /** Not offered or allowed on the car: [HIDDEN] and camera apps. */
+    fun blocked(pkg: String) = pkg in HIDDEN || pkg in cameraApps
+
+    /**
+     * Apps that take photos or video, asked from Android (whatever camera app
+     * the phone has): the car screen must not become a way to look through the
+     * phone's camera. Refreshed with each app list.
+     */
+    @Volatile var cameraApps: Set<String> = emptySet()
+        private set
+
+    private val CAMERA_INTENTS = listOf(
+        android.provider.MediaStore.ACTION_IMAGE_CAPTURE, android.provider.MediaStore.ACTION_VIDEO_CAPTURE,
+        android.provider.MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA, android.provider.MediaStore.INTENT_ACTION_VIDEO_CAMERA,
+    )
+
+    private fun findCameraApps(pm: PackageManager): Set<String> = CAMERA_INTENTS.flatMap { action ->
+        try {
+            pm.queryIntentActivities(Intent(action), 0).map { it.activityInfo.packageName }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }.toSet()
+
     /** Start an activity on a display. Runs `am` with our shell rights. */
     fun launch(pkg: String, cls: String, displayId: Int): Boolean {
-        if (!VALID_NAME.matches(pkg) || !VALID_NAME.matches(cls) || pkg in HIDDEN) return false
+        if (!VALID_NAME.matches(pkg) || !VALID_NAME.matches(cls) || blocked(pkg)) return false
         // Open on another display (the phone screen)? Close it there first so it
         // starts fresh on the car instead of being moved across displays (see
         // the DESTROY_CONTENT_ON_REMOVAL note in Pane.createDisplay).
@@ -202,7 +241,7 @@ object Apps {
         val tasks = tasksOn(displayId) ?: return emptySet()
         val closed = HashSet<String>()
         for ((id, pkgs) in tasks) {
-            val bad = pkgs.filter { it in DENIED_ON_CAR }
+            val bad = pkgs.filter { it in DENIED_ON_CAR || it in cameraApps }
             if (bad.isNotEmpty() && removeTask(id)) closed += bad
         }
         return closed

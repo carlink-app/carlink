@@ -79,7 +79,10 @@ class Engine(private val code: String, port: Int, allow: String) : NativeCore.Li
 
     init {
         core.set(NativeCore.nativeStart(port, code, allow, this))
-        post { phonePower.restoreAfterCrash() }
+        post {
+            phonePower.restoreAfterCrash()
+            CameraBlock.restore() // undo the camera block of a test build, if one is left
+        }
     }
 
     /** While panes exist: close denied apps that reached the car display anyway. */

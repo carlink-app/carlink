@@ -106,6 +106,8 @@ with checksums. The car page itself deploys to GitHub Pages on every push to
   locked; its suggestions and clipboard chip can show there. Apps can't open
   Settings, Play Store, installers or the keyboard's settings in the car:
   carlink closes them.
+- Camera apps aren't offered in the car and are closed if another app opens
+  them there (apps with a built-in camera, like messengers, still have it).
 - On phones where the car screen shares the phone's power state (seen on a
   Pixel with Android 17), carlink keeps the phone awake and locked with its own
   screen switched off while the car is connected. Press power to use the
