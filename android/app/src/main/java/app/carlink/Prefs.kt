@@ -47,11 +47,24 @@ object Prefs {
     fun setLastCarConnect(ctx: Context, at: Long) = prefs(ctx).edit().putLong("car_connect_at", at).apply()
 
     /**
-     * Developer switch for emulator testing: accept the car page from any
-     * network. Only `adb shell run-as app.carlink touch files/dev_allow_any`
-     * (debug builds) can create it; other apps can't write our files.
+     * Developer switch: extra addresses the car page may connect from besides
+     * the car hotspot, e.g. a desktop for testing. `files/dev_allow` holds
+     * IPv4 addresses or subnets (`192.0.2.10`, `10.0.2.0/24`) or `any`,
+     * separated by commas or whitespace. Only debug builds read it, and only
+     * `adb shell run-as app.carlink` can write it (other apps can't write our
+     * files). Returns the valid entries, comma-separated, or "" if none.
      */
-    fun devAllowAny(ctx: Context): Boolean = BuildConfig.DEBUG && File(ctx.filesDir, "dev_allow_any").exists()
+    fun devAllow(ctx: Context): String {
+        if (!BuildConfig.DEBUG) return ""
+        val f = File(ctx.filesDir, "dev_allow")
+        if (!f.isFile || f.length() > 1024) return ""
+        return parseDevAllow(f.readText())
+    }
+
+    internal fun parseDevAllow(text: String): String =
+        text.split(Regex("[,\\s]+")).filter { it == "any" || DEV_ALLOW_ENTRY.matches(it) }.distinct().joinToString(",")
+
+    private val DEV_ALLOW_ENTRY = Regex("""^((25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(25[0-5]|2[0-4]\d|1?\d?\d)(/([0-9]|[12]\d|3[0-2]))?$""")
 
     fun libPath(ctx: Context): String = File(ctx.applicationInfo.nativeLibraryDir, "libcarlink_core.so").path
 }

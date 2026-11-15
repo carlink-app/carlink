@@ -18,4 +18,4 @@ object EngineArgs {
 
 /** Start the engine with the app's settings ([code] defaults to the saved pairing code). */
 fun IEngine.startFor(ctx: Context, code: String = Prefs.code(ctx)): String =
-    start(code, Prefs.PORT, Prefs.libPath(ctx), Prefs.devAllowAny(ctx))
+    start(code, Prefs.PORT, Prefs.libPath(ctx), Prefs.devAllow(ctx))

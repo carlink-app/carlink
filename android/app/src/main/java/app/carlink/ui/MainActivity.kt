@@ -106,7 +106,9 @@ class MainActivity : Activity() {
         notifButton = button("") { toggleNotifications() }
         root.addView(notifButton)
         setContentView(ScrollView(this).apply { addView(root, MATCH_PARENT, WRAP_CONTENT) })
-        if (Prefs.devAllowAny(this)) root.addView(text(14f).apply { text = "DEV: car page accepted from any network (files/dev_allow_any)" })
+        Prefs.devAllow(this).takeIf { it.isNotEmpty() }?.let { dev ->
+            root.addView(text(14f).apply { text = "DEV: car page also accepted from $dev (files/dev_allow)" })
+        }
         codeView.text = Prefs.code(this)
         showCar()
         setStatus("checking engine...")

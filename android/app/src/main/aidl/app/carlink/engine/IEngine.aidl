@@ -10,7 +10,7 @@ interface IEngine {
 
     // devAllowAny: accept the car page from any network (emulator testing), not just the car hotspot.
     // libPath is ignored (kept for the transaction layout): the engine finds its own library.
-    String start(String code, int port, String libPath, boolean devAllowAny) = 1;
+    String start(String code, int port, String libPath, String devAllow) = 1;
     String status() = 2;
     void stop() = 3;
     String carHotspot(boolean on) = 4;

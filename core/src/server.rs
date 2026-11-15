@@ -190,21 +190,30 @@ fn auth_ok(key: &ring::hmac::Key, nonce: &[u8], mac: &[u8]) -> bool {
     ring::hmac::verify(key, &auth_message(nonce), mac).is_ok()
 }
 
-/// Parse "a.b.c.d/n" into (network, mask); empty = allow all.
-pub(crate) fn parse_allow(s: &str) -> anyhow::Result<Option<(u32, u32)>> {
-    if s.is_empty() {
+/// Allowed IPv4 networks as (network, mask); `None` = allow all.
+pub(crate) type Allow = Option<Vec<(u32, u32)>>;
+
+/// Parse "a.b.c.d/n,a.b.c.d,..." (a bare address = /32); empty = allow all.
+pub(crate) fn parse_allow(s: &str) -> anyhow::Result<Allow> {
+    if s.trim().is_empty() {
         return Ok(None);
     }
-    let (ip, bits) = s.split_once('/').unwrap_or((s, "32"));
-    let ip: Ipv4Addr = ip.parse()?;
-    let bits: u32 = bits.parse()?;
-    anyhow::ensure!(bits <= 32, "bad prefix length");
-    let mask = if bits == 0 { 0 } else { u32::MAX << (32 - bits) };
-    Ok(Some((u32::from(ip) & mask, mask)))
+    s.split(',')
+        .map(|entry| {
+            let entry = entry.trim();
+            let (ip, bits) = entry.split_once('/').unwrap_or((entry, "32"));
+            let ip: Ipv4Addr = ip.parse()?;
+            let bits: u32 = bits.parse()?;
+            anyhow::ensure!(bits <= 32, "bad prefix length");
+            let mask = if bits == 0 { 0 } else { u32::MAX << (32 - bits) };
+            Ok((u32::from(ip) & mask, mask))
+        })
+        .collect::<anyhow::Result<Vec<_>>>()
+        .map(Some)
 }
 
-pub(crate) fn allowed(allow: Option<(u32, u32)>, addr: IpAddr) -> bool {
-    let Some((net, mask)) = allow else { return true };
+pub(crate) fn allowed(allow: &Allow, addr: IpAddr) -> bool {
+    let Some(nets) = allow else { return true };
     let v4 = match addr {
         IpAddr::V4(a) => a,
         IpAddr::V6(a) => match a.to_ipv4_mapped() {
@@ -212,7 +221,7 @@ pub(crate) fn allowed(allow: Option<(u32, u32)>, addr: IpAddr) -> bool {
             None => return false,
         },
     };
-    u32::from(v4) & mask == net
+    nets.iter().any(|&(net, mask)| u32::from(v4) & mask == net)
 }
 
 /// Reads newline-terminated lines, refusing lines longer than MAX_LINE.
@@ -287,7 +296,7 @@ fn server_config(port: u16, code: &str) -> anyhow::Result<(ServerConfig, i64)> {
 
 impl Server {
     pub fn start(opts: Options, listener: Arc<dyn Listener>) -> anyhow::Result<Self> {
-        let allow = parse_allow(&opts.allow)?;
+        let allow = Arc::new(parse_allow(&opts.allow)?);
         let rt = tokio::runtime::Builder::new_multi_thread()
             .worker_threads(2)
             .thread_name("carlink-net")
@@ -338,7 +347,7 @@ impl Server {
             rt.spawn(async move {
                 for id in 1u64.. {
                     let incoming = endpoint.accept().await;
-                    let (shared, listener, key, pending) = (shared.clone(), listener.clone(), key.clone(), pending.clone());
+                    let (shared, listener, key, pending, allow) = (shared.clone(), listener.clone(), key.clone(), pending.clone(), allow.clone());
                     tokio::spawn(async move {
                         if let Err(e) = handle_session(id, incoming, allow, key, shared, listener, pending).await {
                             log::info!("session {id} ended: {e}");
@@ -394,7 +403,7 @@ impl Server {
 async fn handle_session(
     id: u64,
     incoming: IncomingSession,
-    allow: Option<(u32, u32)>,
+    allow: Arc<Allow>,
     key: Arc<ring::hmac::Key>,
     shared: Arc<Mutex<Shared>>,
     listener: Arc<dyn Listener>,
@@ -405,7 +414,7 @@ async fn handle_session(
     // addresses outside the car subnet or in auth backoff.
     let ip = incoming.remote_address().ip();
     let in_backoff = shared.lock().unwrap().failures.get(&ip).is_some_and(|(n, at)| at.elapsed() < backoff(*n));
-    if !allowed(allow, ip) || in_backoff {
+    if !allowed(&allow, ip) || in_backoff {
         incoming.ignore();
         anyhow::bail!("ignored {ip}{}", if in_backoff { " (auth backoff)" } else { "" });
     }
@@ -614,13 +623,23 @@ mod tests {
     #[test]
     fn allow_subnet() {
         let a = parse_allow("9.9.0.0/24").unwrap();
-        assert!(allowed(a, "9.9.0.2".parse().unwrap()));
-        assert!(allowed(a, "::ffff:9.9.0.2".parse().unwrap()));
-        assert!(!allowed(a, "9.9.1.2".parse().unwrap()));
-        assert!(!allowed(a, "192.168.1.5".parse().unwrap()));
-        assert!(!allowed(a, "::1".parse().unwrap()));
-        assert!(allowed(parse_allow("").unwrap(), "1.2.3.4".parse().unwrap()));
+        assert!(allowed(&a, "9.9.0.2".parse().unwrap()));
+        assert!(allowed(&a, "::ffff:9.9.0.2".parse().unwrap()));
+        assert!(!allowed(&a, "9.9.1.2".parse().unwrap()));
+        assert!(!allowed(&a, "192.168.1.5".parse().unwrap()));
+        assert!(!allowed(&a, "::1".parse().unwrap()));
+        assert!(allowed(&parse_allow("").unwrap(), "1.2.3.4".parse().unwrap()));
         assert!(parse_allow("9.9.0.0/33").is_err());
+    }
+
+    #[test]
+    fn allow_list() {
+        let a = parse_allow("9.9.0.0/24, 192.0.2.10").unwrap();
+        assert!(allowed(&a, "9.9.0.2".parse().unwrap()));
+        assert!(allowed(&a, "192.0.2.10".parse().unwrap()));
+        assert!(!allowed(&a, "192.0.2.11".parse().unwrap()));
+        assert!(parse_allow("9.9.0.0/24,").is_err());
+        assert!(parse_allow("9.9.0.0/24,any").is_err());
     }
 
     #[test]

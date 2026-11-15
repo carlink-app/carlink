@@ -21,6 +21,12 @@ const val APP_PACKAGE = "app.carlink"
 /** The car joins the hotspot on this subnet (see Hotspot); only it may connect. */
 const val CAR_SUBNET = "9.9.0.0/24"
 
+/** The core's allow list: the car subnet plus [devAllow] entries (see Prefs.devAllow); `any` = everyone. */
+fun allowList(devAllow: String): String {
+    val extra = devAllow.split(',').map { it.trim() }.filter { it.isNotEmpty() }
+    return if ("any" in extra) "" else (listOf(CAR_SUBNET) + extra).joinToString(",")
+}
+
 @SuppressLint("PrivateApi", "DiscouragedPrivateApi")
 object Shell {
     const val PACKAGE = "com.android.shell"

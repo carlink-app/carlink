@@ -2,8 +2,8 @@
 # Start the engine the production way (carlink app -> Shizuku user service) on
 # a connected device/emulator: opens the app, taps "Start engine", waits until
 # the WebTransport server listens. Shizuku must be running and allowed.
-# Emulator: `adb emu redir add udp:24433:4433` and the dev_allow_any switch
-# (adb shell run-as app.carlink touch /data/data/app.carlink/files/dev_allow_any).
+# Emulator: `adb emu redir add udp:24433:4433` and the dev_allow switch
+# (adb shell "run-as app.carlink sh -c 'echo 10.0.2.2 > files/dev_allow'").
 set -euo pipefail
 adb logcat -c
 adb shell am start -n app.carlink/.ui.MainActivity >/dev/null

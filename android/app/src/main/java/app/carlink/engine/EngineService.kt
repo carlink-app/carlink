@@ -14,7 +14,7 @@ class EngineService : IEngine.Stub() {
     private val appUid by lazy { Shell.context.packageManager.getPackageUid(APP_PACKAGE, 0) }
 
     @Synchronized
-    override fun start(code: String, port: Int, libPath: String, devAllowAny: Boolean): String {
+    override fun start(code: String, port: Int, libPath: String, devAllow: String): String {
         if (!fromCarlink()) return "denied"
         if (engine != null) return "already running"
         return try {
@@ -22,8 +22,8 @@ class EngineService : IEngine.Stub() {
             val dir = Shell.context.packageManager.getApplicationInfo(APP_PACKAGE, 0).nativeLibraryDir
             System.load("$dir/libcarlink_core.so")
             Shell.init()
-            engine = Engine(code, port, if (devAllowAny) "" else CAR_SUBNET).also { it.toApp = toApp() }
-            if (devAllowAny) Log.w(TAG, "DEV: accepting the car page from any network")
+            engine = Engine(code, port, allowList(devAllow)).also { it.toApp = toApp() }
+            if (devAllow.isNotEmpty()) Log.w(TAG, "DEV: also accepting the car page from $devAllow")
             "running on :$port"
         } catch (t: Throwable) {
             Log.e(TAG, "engine start failed", t)
