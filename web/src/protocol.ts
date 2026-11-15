@@ -51,7 +51,9 @@ export function writeHeader(h: FrameHeader, out: Uint8Array): void {
   dv.setBigUint64(16, BigInt(h.sendUs));
 }
 
-export interface AppInfo { pkg: string; cls: string; label: string; icon?: string }
+/** Launcher group, from the phone (missing on older engines: Other). */
+export type AppCategory = 'nav' | 'music' | 'social' | 'work' | 'other';
+export interface AppInfo { pkg: string; cls: string; label: string; icon?: string; cat?: AppCategory }
 
 export type PhoneMsg =
   | { t: 'challenge'; v: number; nonce: string }
@@ -80,7 +82,10 @@ export type PageMsg =
   | { t: 'touch'; pane: number; a: 'down' | 'move' | 'up' | 'cancel'; id: number; x: number; y: number }
   | { t: 'key'; pane: number; k: 'back' | 'home' }
   | { t: 'keyframe'; pane: number }
-  | { t: 'notif-open'; id: string };
+  | { t: 'notif-open'; id: string }
+  /** Close one app on the pane, or all of them (removes their tasks; no force-stop). */
+  | { t: 'close'; pane: number; pkg: string }
+  | { t: 'close-all'; pane: number };
 
 // ---- main thread <-> decode worker ----
 

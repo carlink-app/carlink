@@ -209,6 +209,14 @@ class Engine(private val code: String, port: Int, allow: String) : NativeCore.Li
             "touch" -> panes[m.getInt("pane")]?.touch?.handle(
                 m.getString("a"), m.getInt("id"), m.getDouble("x").toFloat(), m.getDouble("y").toFloat(),
             )
+            "close", "close-all" -> {
+                val id = m.getInt("pane")
+                val pane = panes[id] ?: return
+                val pkg = if (m.getString("t") == "close") m.getString("pkg") else null
+                val n = Apps.close(pane.displayId, pkg)
+                Log.i(TAG, "closed $n task(s) on pane $id${pkg?.let { " ($it)" } ?: ""}")
+                if (pkg == null || lastLaunch[id]?.first == pkg) lastLaunch.remove(id)
+            }
             "key" -> {
                 val pane = panes[m.getInt("pane")] ?: return
                 if (m.getString("k") == "back") Input.key(pane.displayId, KeyEvent.KEYCODE_BACK)

@@ -8,6 +8,7 @@ import type { Codec } from './h26x';
 import { PANE_DPI, type AppInfo, type FromWorker, type PageMsg, type PaneLayout, type PaneStats, type PhoneMsg, type ToWorker } from './protocol';
 import { makeCert, weekStart } from './cert';
 import { ErrorWindow, fingerprint, LogRing, maskCode, resolveCode, shortUA, utcStamp } from './diag';
+import { afterClose, groupApps } from './apps';
 import { addBanner, nextExpiry, pruneExpired, removeBanner, sanitizeNotif, validId, type Banner, type Notif } from './notifs';
 import { effective, loadSaved, paneDpi, sameEndpoint, save, saveDisplay, validPort, type Settings } from './settings';
 import { Samples } from './stats';
@@ -373,20 +374,28 @@ function iconEl(label: string, src: string | undefined): HTMLElement {
 }
 
 function setApps(list: AppInfo[]) {
-  apps = list.filter((a) => a && typeof a.pkg === 'string')
-    .sort((a, b) => (a.label || '').localeCompare(b.label || ''));
+  apps = list.filter((a) => a && typeof a.pkg === 'string');
   // Refresh recents' icons/labels from the phone's list.
   recents = recents.map((r) => apps.find((a) => a.pkg === r.pkg && a.cls === r.cls) ?? r);
   renderRecents();
-  const grid = $('grid');
-  grid.replaceChildren(...apps.map((a) => {
-    const b = document.createElement('button');
-    b.className = 'app';
-    const label = document.createElement('span');
-    label.textContent = a.label || a.pkg;
-    b.append(appIcon(a), label);
-    b.addEventListener('click', () => launch(a));
-    return b;
+  $('grid').replaceChildren(...groupApps(apps).map((g) => {
+    const section = document.createElement('section');
+    section.className = 'app-group';
+    const h = document.createElement('h2');
+    h.textContent = g.title;
+    const grid = document.createElement('div');
+    grid.className = 'app-grid';
+    grid.append(...g.apps.map((a) => {
+      const b = document.createElement('button');
+      b.className = 'app';
+      const label = document.createElement('span');
+      label.textContent = a.label || a.pkg;
+      b.append(appIcon(a), label);
+      b.addEventListener('click', () => launch(a));
+      return b;
+    }));
+    section.append(h, grid);
+    return section;
   }));
   updateLauncherMsg();
 }
@@ -402,21 +411,87 @@ function updateLauncherMsg() {
 function launch(a: AppInfo) {
   send({ t: 'launch', pane: 0, pkg: a.pkg, cls: a.cls });
   current = a.pkg;
-  recents = [a, ...recents.filter((r) => !(r.pkg === a.pkg && r.cls === a.cls))].slice(0, MAX_RECENTS);
-  try { localStorage.setItem('carlink.recents', JSON.stringify(recents)); } catch { /* quota: icons too big */ }
-  renderRecents();
+  setRecents([a, ...recents.filter((r) => !(r.pkg === a.pkg && r.cls === a.cls))]);
   showLauncher(false);
+}
+
+function setRecents(list: AppInfo[]) {
+  recents = list.slice(0, MAX_RECENTS);
+  try { localStorage.setItem('carlink.recents', JSON.stringify(recents)); } catch { /* quota: icons too big */ }
+  disarm();
+  renderRecents();
+}
+
+/**
+ * Close one app: the rail moves on to the next app (already running, so it's
+ * instant) or the launcher. The next app is brought up before the closed one
+ * goes, so the car never sees what happens to be underneath.
+ */
+function closeApp(pkg: string) {
+  const r = afterClose(recents, current, pkg);
+  if (r.next) {
+    send({ t: 'launch', pane: 0, pkg: r.next.pkg, cls: r.next.cls });
+    current = r.next.pkg;
+  } else if (r.wasCurrent) {
+    current = null;
+    showLauncher(true);
+  }
+  send({ t: 'close', pane: 0, pkg });
+  disarm();
+  // Let the icon shrink away, then drop it.
+  $('recents').querySelectorAll<HTMLElement>('.recent').forEach((el) => {
+    el.classList.toggle('current', el.dataset.pkg === current);
+    if (el.dataset.pkg === pkg) el.classList.add('leaving');
+  });
+  setTimeout(() => setRecents(recents.filter((a) => a.pkg !== pkg)), 180);
+}
+
+function closeAll() {
+  send({ t: 'close-all', pane: 0 });
+  current = null;
+  $('recents').querySelectorAll('.recent').forEach((el) => el.classList.add('leaving'));
+  showLauncher(true);
+  setTimeout(() => setRecents([]), 180);
+}
+
+// Destructive rail actions take two taps: the first arms (shows ×), the second acts.
+let armed: string | null = null; // package, or '*' for close-all
+let armTimer = 0;
+function arm(what: string) {
+  armed = what;
+  clearTimeout(armTimer);
+  armTimer = window.setTimeout(disarm, 3000);
+  renderArmed();
+}
+function disarm() {
+  armed = null;
+  clearTimeout(armTimer);
+  renderArmed();
+}
+function renderArmed() {
+  $('recents').querySelectorAll<HTMLElement>('.recent').forEach((el) => el.classList.toggle('armed', el.dataset.pkg === armed));
+  $('btn-closeall').classList.toggle('armed', armed === '*');
 }
 
 function renderRecents() {
   $('recents').replaceChildren(...recents.map((a) => {
     const b = document.createElement('button');
     b.className = 'rail-btn recent' + (a.pkg === current ? ' current' : '');
+    b.dataset.pkg = a.pkg;
     b.setAttribute('aria-label', a.label);
-    b.appendChild(appIcon(a));
-    b.addEventListener('click', () => launch(a));
+    const x = document.createElement('span');
+    x.className = 'close-badge';
+    x.appendChild(closeIcon());
+    b.append(appIcon(a), x);
+    b.addEventListener('click', () => {
+      if (armed === a.pkg) closeApp(a.pkg);
+      // Tapping the app already in front again offers to close it.
+      else if (a.pkg === current && !launcherOn) arm(a.pkg);
+      else launch(a);
+    });
     return b;
   }));
+  $('btn-closeall').hidden = recents.length === 0;
 }
 
 let launcherOn = false;
@@ -430,6 +505,10 @@ $('btn-home').addEventListener('click', () => {
   const on = !launcherOn;
   if (on) send({ t: 'key', pane: 0, k: 'home' });
   showLauncher(on || !current); // until something is launched, there's nothing behind it
+});
+$('btn-closeall').addEventListener('click', () => {
+  if (armed === '*') closeAll();
+  else arm('*');
 });
 $('btn-back').addEventListener('click', () => {
   if (launcherOn && current) { showLauncher(false); return; }

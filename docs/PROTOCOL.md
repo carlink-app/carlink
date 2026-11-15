@@ -87,6 +87,8 @@ Page -> phone:
 {"t":"key","pane":0,"k":"back"}
 {"t":"keyframe","pane":0}
 {"t":"notif-open","id":"n3f9a1c"}
+{"t":"close","pane":0,"pkg":"com.waze"}
+{"t":"close-all","pane":0}
 ```
 
 - `touch.a`: `down` | `move` | `up` | `cancel`. `id` = pointer id
@@ -97,6 +99,10 @@ Page -> phone:
 - Limits enforced by the phone: up to 4 panes (ids 0-3), w/h 320-4096 (even),
   dpi 72-640, pointer ids 0-9, `launch` only for apps from the `apps` list.
   Anything else is answered with `{"t":"error","msg":"..."}` (generic text).
+- `close` / `close-all`: remove that app's tasks (or every task) from the
+  pane's display, like swiping them away in recents; no force-stop, so
+  notifications and background work continue. The page brings up the next
+  app first (a plain `launch`), so nothing else flashes on the car.
 - `notif-open`: the driver tapped a notification banner; the phone opens it
   on pane 0 (the app's content intent, or the app itself). Unknown ids are
   ignored.
@@ -111,13 +117,16 @@ Phone -> page:
 ```json
 {"t":"hello","v":2,"device":"Pixel 9 Pro","android":36}
 {"t":"pane","id":0,"w":1824,"h":1200,"codec":"h264"}
-{"t":"apps","list":[{"pkg":"...","cls":"...","label":"Maps","icon":"data:image/png;base64,..."}]}
+{"t":"apps","list":[{"pkg":"...","cls":"...","label":"Maps","cat":"nav","icon":"data:image/png;base64,..."}]}
 {"t":"launched","pane":0,"pkg":"..."}
 {"t":"error","msg":"..."}
 {"t":"notif","id":"n3f9a1c","pkg":"com.whatsapp","app":"WhatsApp","title":"Alice","text":"On my way","icon":"data:image/png;base64,...","kind":"msg"}
 {"t":"notif-gone","id":"n3f9a1c"}
 ```
 
+- `apps.cat`: launcher group, `nav` | `music` | `social` | `work` | `other`
+  (known apps first, then the app's declared category). Missing or unknown
+  = `other`. The page shows the groups in that order.
 - `notif`: a phone notification worth showing in the car (new or updated;
   same `id` replaces the earlier one). `kind`: `msg` | `call` | `nav` |
   `other`. Limits: `id` up to 64 chars of `[A-Za-z0-9_-]`, `title` up to 120,

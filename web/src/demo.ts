@@ -2,7 +2,7 @@
 // network frames (24-byte header + access unit), at 60 fps, looping.
 
 import { codecString, splitAccessUnits } from './h26x';
-import { FLAG_KEY, HEADER_LEN, KIND_VIDEO, writeHeader, type AppInfo, type PhoneMsg } from './protocol';
+import { FLAG_KEY, HEADER_LEN, KIND_VIDEO, writeHeader, type AppCategory, type AppInfo, type PhoneMsg } from './protocol';
 
 export const DEMO_W = 1920;
 export const DEMO_H = 1200;
@@ -69,11 +69,11 @@ export async function startDemo(onFrame: (buf: ArrayBuffer) => void, onError: (m
   feed();
 }
 
-const DEMO_APPS: [string, string][] = [
-  ['Maps', '#1a73e8'], ['Spotify', '#1db954'], ['YouTube Music', '#ff0000'], ['Waze', '#33ccff'],
-  ['Messages', '#4285f4'], ['Phone', '#34a853'], ['Podcasts', '#8e24aa'], ['Audible', '#f29a33'],
-  ['Calendar', '#1967d2'], ['Weather', '#fbbc04'], ['WhatsApp', '#25d366'], ['Pocket Casts', '#f43e37'],
-  ['Settings', '#5f6368'], ['Chrome', '#0f9d58'], ['Photos', '#ea4335'], ['Clock', '#3c4043'],
+const DEMO_APPS: [string, string, AppCategory][] = [
+  ['Maps', '#1a73e8', 'nav'], ['Spotify', '#1db954', 'music'], ['YouTube Music', '#ff0000', 'music'], ['Waze', '#33ccff', 'nav'],
+  ['Messages', '#4285f4', 'social'], ['Phone', '#34a853', 'social'], ['Podcasts', '#8e24aa', 'music'], ['Audible', '#f29a33', 'music'],
+  ['Calendar', '#1967d2', 'work'], ['Weather', '#fbbc04', 'other'], ['WhatsApp', '#25d366', 'social'], ['Pocket Casts', '#f43e37', 'music'],
+  ['Settings', '#5f6368', 'other'], ['Chrome', '#0f9d58', 'other'], ['Photos', '#ea4335', 'other'], ['Clock', '#3c4043', 'other'],
 ];
 
 /** A PNG data URL (the only icon format the page accepts): coloured circle + letter. */
@@ -93,8 +93,8 @@ function icon(label: string, color: string): string {
   return c.toDataURL('image/png');
 }
 
-export const demoApps = (): AppInfo[] => DEMO_APPS.map(([label, color]) => ({
-  pkg: `demo.${label.toLowerCase().replace(/\W/g, '')}`, cls: 'MainActivity', label, icon: icon(label, color),
+export const demoApps = (): AppInfo[] => DEMO_APPS.map(([label, color, cat]) => ({
+  pkg: `demo.${label.toLowerCase().replace(/\W/g, '')}`, cls: 'MainActivity', label, icon: icon(label, color), cat,
 }));
 
 /**

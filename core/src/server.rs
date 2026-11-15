@@ -43,7 +43,7 @@ const KEYFRAME_REQUEST_INTERVAL: Duration = Duration::from_millis(250);
 const AUTH_KEY_LABEL: &str = "carlink-auth-key-v1:";
 const AUTH_MAC_LABEL: &[u8] = b"carlink-auth-v1|";
 /// Control message types the page may send (anything else closes the session).
-const CONTROL_TYPES: &[&str] = &["hello", "layout", "apps", "launch", "touch", "key", "keyframe", "notif-open"];
+const CONTROL_TYPES: &[&str] = &["hello", "layout", "apps", "launch", "touch", "key", "keyframe", "notif-open", "close", "close-all"];
 
 /// Callbacks into the app (implemented over JNI in lib.rs).
 pub trait Listener: Send + Sync + 'static {
