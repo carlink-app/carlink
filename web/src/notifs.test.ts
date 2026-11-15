@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  addBanner, AUTO_HIDE_MS, clean, MAX_ICON, MAX_TEXT, MAX_TITLE, MAX_VISIBLE, nextExpiry, pruneExpired,
-  removeBanner, safeIcon, sanitizeNotif, type Banner, type Notif,
+  addBanner, addToTray, AUTO_HIDE_MS, callsFirst, clean, MAX_ICON, MAX_TEXT, MAX_TITLE, MAX_TRAY, MAX_VISIBLE, nextExpiry, pruneExpired,
+  removeBanner, removeFromTray, safeIcon, sanitizeNotif, trayBadge, trayOthers, type Banner, type Notif,
 } from './notifs';
 
 const PNG = 'data:image/png;base64,iVBORw0KGgo=';
@@ -81,27 +81,26 @@ describe('safeIcon', () => {
 });
 
 describe('banner queue', () => {
-  it('puts new banners on top and keeps at most 3, dropping the oldest', () => {
+  it('shows only the newest pop-up (the map stays visible)', () => {
     let l: Banner[] = [];
     for (const id of ['a', 'b', 'c', 'd']) l = addBanner(l, n(id), 0);
     expect(l).toHaveLength(MAX_VISIBLE);
-    expect(ids(l)).toEqual(['d', 'c', 'b']);
+    expect(ids(l)).toEqual(['d']);
   });
   it('replaces the same id in place and restarts its timer', () => {
     let l = addBanner([], n('a'), 0);
-    l = addBanner(l, n('b'), 1000);
     l = addBanner(l, { ...n('a'), title: 'updated' }, 5000);
-    expect(ids(l)).toEqual(['b', 'a']);
-    expect(l[1].n.title).toBe('updated');
-    expect(l[1].expires).toBe(5000 + AUTO_HIDE_MS);
+    expect(ids(l)).toEqual(['a']);
+    expect(l[0].n.title).toBe('updated');
+    expect(l[0].expires).toBe(5000 + AUTO_HIDE_MS);
   });
   it('removes by id (unknown ids are a no-op)', () => {
-    let l = addBanner(addBanner([], n('a'), 0), n('b'), 0);
-    l = removeBanner(l, 'a');
+    let l = addBanner(addBanner([], n('call', 'call'), 0), n('b'), 0);
+    l = removeBanner(l, 'call');
     expect(ids(l)).toEqual(['b']);
     expect(ids(removeBanner(l, 'zzz'))).toEqual(['b']);
   });
-  it('expires after 8 s, except calls', () => {
+  it('expires after 6 s, except calls', () => {
     let l = addBanner([], n('call', 'call'), 0);
     l = addBanner(l, n('m'), 1000);
     expect(nextExpiry(l)).toBe(1000 + AUTO_HIDE_MS);
@@ -163,9 +162,10 @@ describe('banner queue edge cases', () => {
   });
   it('updating a banner does not reorder or evict the others', () => {
     let l: Banner[] = [];
-    for (const id of ['a', 'b', 'c']) l = addBanner(l, n(id), 0);
-    l = addBanner(l, n('a'), 10);
-    expect(ids(l)).toEqual(['c', 'b', 'a']);
+    for (const id of ['c1', 'c2']) l = addBanner(l, n(id, 'call'), 0);
+    l = addBanner(l, n('m'), 0);
+    l = addBanner(l, n('c1', 'call'), 10);
+    expect(ids(l)).toEqual(['m', 'c2', 'c1']);
   });
 });
 
@@ -176,6 +176,105 @@ describe('ringing calls survive the cap', () => {
       ({ id, pkg: 'p', app: 'A', title: id, text: '', kind } as Parameters<typeof addBanner>[1]);
     let list = addBanner([], mk('call', 'call'), 0);
     for (const id of ['m1', 'm2', 'm3', 'm4']) list = addBanner(list, mk(id, 'msg'), 1);
-    expect(list.map((b) => b.n.id)).toEqual(['m4', 'm3', 'call']);
+    expect(list.map((b) => b.n.id)).toEqual(['m4', 'call']);
+  });
+});
+
+describe('tray', () => {
+  it('keeps everything that popped up, newest first, until removed', () => {
+    let t: Notif[] = [];
+    for (const id of ['a', 'b', 'c']) t = addToTray(t, n(id));
+    expect(t.map((x) => x.id)).toEqual(['c', 'b', 'a']);
+    t = removeFromTray(t, 'b');
+    expect(t.map((x) => x.id)).toEqual(['c', 'a']);
+  });
+  it('an update moves it to the top with the new content', () => {
+    let t = addToTray(addToTray([], n('a')), n('b'));
+    t = addToTray(t, { ...n('a'), title: 'new' });
+    expect(t.map((x) => x.id)).toEqual(['a', 'b']);
+    expect(t[0].title).toBe('new');
+  });
+  it('drops calls (also when an entry turns into one) and caps the size', () => {
+    let t = addToTray([], n('x'));
+    t = addToTray(t, n('x', 'call'));
+    expect(t).toEqual([]);
+    for (let i = 0; i < MAX_TRAY + 5; i++) t = addToTray(t, n(`m${i}`));
+    expect(t).toHaveLength(MAX_TRAY);
+    expect(t[0].id).toBe(`m${MAX_TRAY + 4}`);
+  });
+});
+
+describe('banner and tray together (as main.ts uses them)', () => {
+  // One incoming notif: banner + tray, like onMessage('notif').
+  const arrive = (s: { b: Banner[]; t: Notif[] }, x: Notif, now = 0) => ({ b: addBanner(s.b, x, now), t: addToTray(s.t, x) });
+  const forget = (s: { b: Banner[]; t: Notif[] }, id: string) => ({ b: removeBanner(s.b, id), t: removeFromTray(s.t, id) });
+
+  it('a new message replaces the pop-up but every message stays in the tray', () => {
+    let s = { b: [] as Banner[], t: [] as Notif[] };
+    for (const id of ['a', 'b', 'c']) s = arrive(s, n(id));
+    expect(ids(s.b)).toEqual(['c']);
+    expect(s.t.map((x) => x.id)).toEqual(['c', 'b', 'a']);
+    expect(trayOthers(s.t, 'c')).toBe(2);
+  });
+  it('a ringing call pops up alongside one message, and is not in the tray', () => {
+    let s = { b: [] as Banner[], t: [] as Notif[] };
+    s = arrive(s, n('m1'));
+    s = arrive(s, n('call', 'call'));
+    s = arrive(s, n('m2'));
+    expect(ids(s.b)).toEqual(['m2', 'call']);
+    expect(ids(callsFirst(s.b))).toEqual(['call', 'm2']);
+    expect(s.t.map((x) => x.id)).toEqual(['m2', 'm1']);
+    expect(trayOthers(s.t, 'call')).toBe(2); // main.ts hides the chip on calls anyway
+  });
+  it('forgetting (gone / opened / dismissed) clears both', () => {
+    let s = arrive(arrive({ b: [], t: [] }, n('a')), n('b'));
+    s = forget(s, 'b');
+    expect(s.b).toEqual([]);
+    expect(s.t.map((x) => x.id)).toEqual(['a']);
+  });
+  it('a banner expiring leaves it in the tray', () => {
+    let s = arrive({ b: [], t: [] }, n('a'), 0);
+    s = { ...s, b: pruneExpired(s.b, AUTO_HIDE_MS) };
+    expect(s.b).toEqual([]);
+    expect(s.t.map((x) => x.id)).toEqual(['a']);
+  });
+});
+
+describe('trayOthers ("+N" chip)', () => {
+  it('counts tray entries other than the banner', () => {
+    const t = [n('a'), n('b'), n('c')];
+    expect(trayOthers(t, 'a')).toBe(2);
+    expect(trayOthers(t, 'zzz')).toBe(3);
+    expect(trayOthers([n('a')], 'a')).toBe(0);
+    expect(trayOthers([], 'a')).toBe(0);
+  });
+});
+
+describe('trayBadge', () => {
+  it('shows the count up to 9, then 9+', () => {
+    expect(trayBadge(0)).toBe('0');
+    expect(trayBadge(1)).toBe('1');
+    expect(trayBadge(9)).toBe('9');
+    expect(trayBadge(10)).toBe('9+');
+    expect(trayBadge(MAX_TRAY)).toBe('9+');
+  });
+});
+
+describe('callsFirst', () => {
+  it('puts ringing calls first and keeps the queue order otherwise (stable)', () => {
+    let l: Banner[] = [];
+    l = addBanner(l, n('c1', 'call'), 0);
+    l = addBanner(l, n('m'), 0);
+    l = addBanner(l, n('c2', 'call'), 0);
+    expect(ids(l)).toEqual(['c2', 'm', 'c1']);
+    expect(ids(callsFirst(l))).toEqual(['c2', 'c1', 'm']);
+  });
+  it('does not mutate its input and handles empty / no-call lists', () => {
+    const l = addBanner(addBanner([], n('c', 'call'), 0), n('m'), 0);
+    const copy = structuredClone(l);
+    callsFirst(l);
+    expect(l).toEqual(copy);
+    expect(callsFirst([])).toEqual([]);
+    expect(ids(callsFirst(addBanner([], n('m'), 0)))).toEqual(['m']);
   });
 });

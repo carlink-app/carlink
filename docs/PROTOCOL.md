@@ -122,11 +122,17 @@ Phone -> page:
 {"t":"error","msg":"..."}
 {"t":"notif","id":"n3f9a1c","pkg":"com.whatsapp","app":"WhatsApp","title":"Alice","text":"On my way","icon":"data:image/png;base64,...","kind":"msg"}
 {"t":"notif-gone","id":"n3f9a1c"}
+{"t":"notif-reset"}
 ```
 
 - `apps.cat`: launcher group, `nav` | `energy` | `music` | `social` | `work` | `other`
   (known apps first, then the app's declared category). Missing or unknown
   = `other`. The page shows the groups in that order.
+- `notif.replay`: true on the re-sends after a reconnect (calls in progress and
+  notifications under 5 minutes old); the page skips ones the driver already
+  opened or dismissed.
+- `notif-reset`: drop every shown notification (banners and tray): the phone
+  re-syncs, or notification access was turned off.
 - `notif`: a phone notification worth showing in the car (new or updated;
   same `id` replaces the earlier one). `kind`: `msg` | `call` | `nav` |
   `other`. Limits: `id` up to 64 chars of `[A-Za-z0-9_-]`, `title` up to 120,

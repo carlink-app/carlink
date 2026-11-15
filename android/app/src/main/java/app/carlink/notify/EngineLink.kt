@@ -72,6 +72,7 @@ class EngineLink(
         override fun onServiceDisconnected(name: ComponentName) {
             // Engine process died or was removed: bind again (Shizuku restarts it on demand).
             engine = null
+            CarSessionNotice.update(ctx, false) // its session is gone too
             bound = false
             main.postDelayed(::bind, 2_000)
         }

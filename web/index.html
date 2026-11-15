@@ -14,6 +14,10 @@
         <svg viewBox="0 0 24 24"><path d="M4 4h4v4H4zm6 0h4v4h-4zm6 0h4v4h-4zM4 10h4v4H4zm6 0h4v4h-4zm6 0h4v4h-4zM4 16h4v4H4zm6 0h4v4h-4zm6 0h4v4h-4z"/></svg>
       </button>
       <div id="recents"></div>
+      <button id="btn-tray" class="rail-btn small" aria-label="Notifications" hidden>
+        <svg viewBox="0 0 24 24"><path d="M12 22a2 2 0 0 0 2-2h-4a2 2 0 0 0 2 2zm6-6V11c0-3.07-1.63-5.64-4.5-6.32V4a1.5 1.5 0 0 0-3 0v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1z"/></svg>
+        <span id="tray-count"></span>
+      </button>
       <button id="btn-closeall" class="rail-btn small" aria-label="Close all apps (tap twice)" hidden>
         <svg viewBox="0 0 24 24"><path d="M5 13h14v-2H5zm-2 4h14v-2H3zM7 7v2h14V7z"/></svg>
         <span class="closeall-label">Close all</span>
@@ -32,7 +36,12 @@
         <div id="launcher-msg"></div>
         <div id="grid"></div>
       </section>
+      <div id="opening" hidden><div class="opening-card"><div id="opening-icon"></div><div id="opening-label"></div></div></div>
       <div id="notifs" aria-live="polite"></div>
+      <section id="tray" hidden aria-label="Notifications">
+        <div class="tray-head"><h2>Notifications</h2><button type="button" id="tray-clear">Clear all</button></div>
+        <div id="tray-list"></div>
+      </section>
       <div id="status"></div>
       <div id="toast"></div>
       <pre id="debug" hidden></pre>

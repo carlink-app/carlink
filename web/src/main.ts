@@ -9,8 +9,11 @@ import { PANE_DPI, type AppInfo, type FromWorker, type PageMsg, type PaneLayout,
 import { makeCert, weekStart } from './cert';
 import { ErrorWindow, fingerprint, LogRing, maskCode, resolveCode, shortUA, utcStamp } from './diag';
 import { afterClose, groupApps } from './apps';
-import { addBanner, nextExpiry, pruneExpired, removeBanner, sanitizeNotif, validId, type Banner, type Notif } from './notifs';
-import { effective, loadSaved, paneDpi, sameEndpoint, save, saveDisplay, validPort, type Settings } from './settings';
+import {
+  addBanner, addToTray, callsFirst, nextExpiry, pruneExpired, removeBanner, removeFromTray, sanitizeNotif, trayBadge, trayOthers, validId,
+  type Banner, type Notif,
+} from './notifs';
+import { effective, loadSaved, paneDpi, sameEndpoint, save, saveDisplay, uiScale, validPort, type Settings } from './settings';
 import { Samples } from './stats';
 import { attachTouch } from './touch';
 
@@ -89,6 +92,13 @@ const sendLayout = () => { if (measureLayout()) send({ t: 'layout', panes: panes
 const layout = (): PaneLayout[] => { measureLayout(); return panes.map((p) => p.layout); };
 
 let layoutTimer = 0;
+/** Page UI scale (--ui in style.css); see uiScale. */
+function applyUiScale() {
+  document.documentElement.style.setProperty('--ui', uiScale(devicePixelRatio).toFixed(3));
+}
+applyUiScale();
+addEventListener('resize', applyUiScale);
+
 new ResizeObserver(() => {
   clearTimeout(layoutTimer);
   layoutTimer = window.setTimeout(sendLayout, 250);
@@ -166,7 +176,7 @@ const conn = new Connection({
     for (const p of panes) p.video = null;
     toWorker({ type: 'reset' });
     // Banners of the previous session would never get their notif-gone.
-    setBanners([]);
+    clearNotifs();
   },
   onFrame: forwardFrame,
   onLost: (buf) => toWorker({ type: 'lost', buf }, [buf]),
@@ -210,16 +220,131 @@ function onMessage(m: PhoneMsg) {
     case 'error': toast(`Phone: ${m.msg}`); break;
     case 'notif': {
       const n = sanitizeNotif(m);
-      if (n) setBanners(addBanner(banners, n, performance.now()));
+      // A replay after a reconnect of something the driver already dismissed: skip.
+      if (n && !(m.replay === true && dismissed.has(n.id))) {
+        setBanners(addBanner(banners, n, performance.now()));
+        setTray(addToTray(tray, n));
+      }
       break;
     }
-    case 'notif-gone': if (validId(m.id)) setBanners(removeBanner(banners, m.id)); break;
+    case 'notif-gone': if (validId(m.id)) forget(m.id); break;
+    // The phone re-sends what's current (or notification access ended): drop ours.
+    case 'notif-reset': clearNotifs(); break;
+    case 'launched': if (m.pane === 0 && m.pkg === openingPkg) openingDone(OPENING_AFTER_LAUNCH_MS); break;
   }
 }
 
-// ---------- notification banners ----------
+// ---------- notification banners and tray ----------
 
 let banners: Banner[] = [];
+let tray: Notif[] = [];
+/** Ids the driver opened or dismissed (bounded): the phone replays recent ones on reconnect. */
+const dismissed = new Set<string>();
+
+/** Gone from the phone: off the screen and out of the tray. */
+function forget(id: string) {
+  setBanners(removeBanner(banners, id));
+  setTray(removeFromTray(tray, id));
+}
+
+function clearNotifs() {
+  setBanners([]);
+  setTray([]);
+}
+
+/** Opened or dismissed by the driver: forget it and don't take it back from a replay. */
+function dismiss(id: string) {
+  remember(id);
+  forget(id);
+}
+
+function remember(id: string) {
+  dismissed.add(id);
+  if (dismissed.size > 200) dismissed.delete(dismissed.values().next().value!);
+}
+
+/** Open a notification's app on the car (the phone opens it; see notif-open). */
+function openNotif(n: Notif) {
+  send({ t: 'notif-open', id: n.id });
+  showOpening(n.app, n.icon, OPENING_NOTIF_MS);
+  dismiss(n.id);
+  showTray(false);
+}
+
+function setTray(next: Notif[]) {
+  tray = next;
+  const count = tray.length;
+  $('btn-tray').hidden = count === 0;
+  $('tray-count').textContent = trayBadge(count);
+  if (count === 0) showTray(false);
+  if (!$('tray').hidden) renderTray();
+  renderBanners(); // the "+N more" chip
+}
+
+function showTray(on: boolean) {
+  $('tray').hidden = !on;
+  $('btn-tray').classList.toggle('active', on);
+  $('main').classList.toggle('tray-open', on); // pop-ups hide behind it (style.css)
+  if (on) renderTray();
+}
+// Touching the app (left of the tray) closes it, like a phone's shade.
+// The touch only closes it (it doesn't also reach the app).
+$('panes').addEventListener('pointerdown', (e) => {
+  if ($('tray').hidden) return;
+  e.stopPropagation();
+  e.preventDefault();
+  showTray(false);
+}, { capture: true });
+
+let trayShownAt = 0;
+function renderTray() {
+  trayShownAt = performance.now(); // rows may have moved: ignore taps meant for the old order
+  $('tray-list').replaceChildren(...tray.map((n) => {
+    const row = document.createElement('div');
+    row.className = `tray-item ${n.kind}`;
+    const body = document.createElement('button');
+    body.className = 'tray-body';
+    body.setAttribute('aria-label', `Open ${n.app}: ${n.title}`);
+    body.append(iconEl(n.app, n.icon), notifTexts(n));
+    body.addEventListener('click', () => { if (performance.now() - trayShownAt >= TAP_GUARD_MS) openNotif(n); });
+    row.append(body, dismissButton(n.id));
+    return row;
+  }));
+}
+
+$('btn-tray').addEventListener('click', () => showTray($('tray').hidden === true));
+$('tray-clear').addEventListener('click', () => {
+  for (const n of tray) remember(n.id);
+  setTray([]);
+  setBanners(banners.filter((b) => b.n.kind === 'call'));
+});
+
+// ---------- opening an app: a short placeholder instead of a black or stale frame ----------
+
+const OPENING_MAX_MS = 3000;
+const OPENING_AFTER_LAUNCH_MS = 450;
+const OPENING_NOTIF_MS = 1800;
+let openingTimer = 0;
+/** Package the placeholder is for: a late `launched` of an earlier app mustn't hide it. */
+let openingPkg = '';
+
+function showOpening(label: string, icon: string | undefined, maxMs = OPENING_MAX_MS, pkg = '') {
+  openingPkg = pkg;
+  $('opening-icon').replaceChildren(iconEl(label, icon));
+  $('opening-label').textContent = label;
+  $('opening').hidden = false;
+  openingDone(maxMs);
+}
+
+function showOpeningApp(a: AppInfo) {
+  showOpening(a.label || a.pkg, vettedIcon(a), OPENING_MAX_MS, a.pkg);
+}
+
+/** Hide the placeholder after [ms] (the app gets a moment to draw its first frames). */
+function openingDone(ms: number) {
+  clearTimeout(openingTimer);
+  openingTimer = window.setTimeout(() => { $('opening').hidden = true; }, ms);
+}
 const bannerEls = new Map<string, HTMLElement>();
 let bannerTimer = 0;
 
@@ -242,6 +367,15 @@ function closeIcon(): SVGSVGElement {
   svg.appendChild(path);
   return svg;
 }
+/** The ✕ on a banner or tray row. */
+function dismissButton(id: string): HTMLButtonElement {
+  const close = document.createElement('button');
+  close.className = 'notif-close';
+  close.setAttribute('aria-label', 'Dismiss');
+  close.appendChild(closeIcon());
+  close.addEventListener('click', () => dismiss(id));
+  return close;
+}
 /** What each banner element currently shows, to skip refilling unchanged ones. */
 const filled = new WeakMap<HTMLElement, { n: Notif; showText: boolean }>();
 /** When each banner last appeared or changed: taps right after that were meant for what was below. */
@@ -256,15 +390,18 @@ function bannerEl(id: string): HTMLElement {
   body.className = 'notif-body';
   body.addEventListener('click', () => {
     if (performance.now() - (shownAt.get(el!) ?? 0) < TAP_GUARD_MS) return;
-    send({ t: 'notif-open', id });
-    setBanners(removeBanner(banners, id));
+    const b = banners.find((x) => x.n.id === id);
+    if (b) openNotif(b.n);
   });
-  const close = document.createElement('button');
-  close.className = 'notif-close';
-  close.setAttribute('aria-label', 'Dismiss');
-  close.appendChild(closeIcon());
-  close.addEventListener('click', () => setBanners(removeBanner(banners, id)));
-  el.append(body, close);
+  // "+N": more notifications waiting in the tray.
+  const more = document.createElement('button');
+  more.className = 'notif-more';
+  more.addEventListener('click', () => {
+    if (performance.now() - (shownAt.get(el!) ?? 0) < TAP_GUARD_MS) return;
+    setBanners(removeBanner(banners, id));
+    showTray(true);
+  });
+  el.append(body, more, dismissButton(id));
   bannerEls.set(id, el);
   return el;
 }
@@ -277,6 +414,12 @@ function fillBanner(el: HTMLElement, n: Notif) {
   shownAt.set(el, performance.now());
   el.className = `notif ${n.kind}`;
   const body = el.firstElementChild as HTMLElement;
+  body.replaceChildren(iconEl(n.app, n.icon), notifTexts(n));
+  body.setAttribute('aria-label', `Open ${n.app}: ${n.title}`);
+}
+
+/** App, title and (if enabled) text of a notification: textContent only. */
+function notifTexts(n: Notif): HTMLElement {
   const texts = document.createElement('div');
   texts.className = 'notif-texts';
   const line = (cls: string, text: string) => {
@@ -287,8 +430,7 @@ function fillBanner(el: HTMLElement, n: Notif) {
   };
   texts.append(line('notif-app', n.app), line('notif-title', n.title));
   if (settings.showText) texts.append(line('notif-text', n.text));
-  body.replaceChildren(iconEl(n.app, n.icon), texts);
-  body.setAttribute('aria-label', `Open ${n.app}: ${n.title}`);
+  return texts;
 }
 
 function renderBanners() {
@@ -296,9 +438,15 @@ function renderBanners() {
   const ids = new Set(banners.map((b) => b.n.id));
   for (const [id, el] of bannerEls) if (!ids.has(id)) { el.remove(); bannerEls.delete(id); }
   // Insert/move only what changed: re-inserting a node would replay its entrance animation.
-  banners.forEach((b, i) => {
+  callsFirst(banners).forEach((b, i) => {
     const el = bannerEl(b.n.id);
     fillBanner(el, b.n);
+    // Others waiting in the tray (calls aren't in it).
+    const others = trayOthers(tray, b.n.id);
+    const more = el.querySelector<HTMLElement>('.notif-more')!;
+    more.hidden = b.n.kind === 'call' || others === 0;
+    more.textContent = `+${others}`;
+    more.setAttribute('aria-label', `${others} more notifications`);
     if (host.children[i] !== el) host.insertBefore(el, host.children[i] ?? null);
   });
 }
@@ -325,6 +473,8 @@ function showStatus(st: Status) {
   // The retry countdown changes each time; without it, repeats collapse in the log.
   if (st.s === 'error') logLine(st.text.replace(/ · retrying in .*$/, ''));
   lastStatus = st;
+  // No phone, no notifications: nothing stays readable in a parked car.
+  if (st.s !== 'connected') clearNotifs();
   const el = $('status');
   el.className = st.s;
   el.textContent = st.text;
@@ -355,9 +505,12 @@ function loadRecents(): AppInfo[] {
   } catch { return []; }
 }
 
+/** Only PNG data URLs from the phone; anything else gets the letter fallback. */
+const vettedIcon = (a: AppInfo): string | undefined =>
+  typeof a.icon === 'string' && a.icon.startsWith('data:image/png;base64,') ? a.icon : undefined;
+
 function appIcon(a: AppInfo): HTMLElement {
-  // Only PNG data URLs from the phone; anything else gets the letter fallback.
-  return iconEl(a.label, typeof a.icon === 'string' && a.icon.startsWith('data:image/png;base64,') ? a.icon : undefined);
+  return iconEl(a.label, vettedIcon(a));
 }
 
 /** `src` must already be a vetted data: URL. */
@@ -371,7 +524,7 @@ function iconEl(label: string, src: string | undefined): HTMLElement {
   }
   const ph = document.createElement('div');
   ph.className = 'ph';
-  ph.textContent = Array.from(label || '?')[0].toUpperCase();
+  ph.textContent = Array.from((typeof label === 'string' && label) || '?')[0].toUpperCase();
   return ph;
 }
 
@@ -412,6 +565,8 @@ function updateLauncherMsg() {
 
 function launch(a: AppInfo) {
   send({ t: 'launch', pane: 0, pkg: a.pkg, cls: a.cls });
+  if (a.pkg !== current) showOpeningApp(a);
+  showTray(false);
   current = a.pkg;
   setRecents([a, ...recents.filter((r) => !(r.pkg === a.pkg && r.cls === a.cls))]);
   showLauncher(false);
@@ -433,6 +588,7 @@ function closeApp(pkg: string) {
   const r = afterClose(recents, current, pkg);
   if (r.next) {
     send({ t: 'launch', pane: 0, pkg: r.next.pkg, cls: r.next.cls });
+    showOpeningApp(r.next);
     current = r.next.pkg;
   } else if (r.wasCurrent) {
     current = null;
@@ -499,6 +655,7 @@ function renderRecents() {
 
 let launcherOn = false;
 function showLauncher(on: boolean) {
+  if (on) { $('opening').hidden = true; showTray(false); }
   if (on !== launcherOn) disarm(); // a close armed for the app in front no longer applies
   launcherOn = on;
   $('launcher').hidden = !on;

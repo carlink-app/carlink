@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_HOST, DEFAULT_PORT } from './protocol';
-import { DEFAULT_DISPLAY, effective, endpoint, loadSaved, paneDpi, sameEndpoint, save, saveDisplay, validPort, type Display, type Settings } from './settings';
+import { DEFAULT_DISPLAY, effective, endpoint, loadSaved, paneDpi, sameEndpoint, save, saveDisplay, uiScale, validPort, type Display, type Settings } from './settings';
 
 function memoryStorage(): Storage {
   const m = new Map<string, string>();
@@ -135,5 +135,24 @@ describe('paneDpi', () => {
     expect(paneDpi(4000, 4000, 3)).toBe(640);
     expect(paneDpi(0, 0, 0)).toBe(220);
     expect(paneDpi(1840, 880, Number.NaN)).toBe(220);
+  });
+});
+
+describe('uiScale', () => {
+  it('is 1 up to dpr 1.15, then shrinks as 1.15 / dpr', () => {
+    expect(uiScale(1)).toBe(1);
+    expect(uiScale(1.15)).toBe(1);
+    expect(uiScale(1.5)).toBeCloseTo(1.15 / 1.5);
+    expect(uiScale(1.75)).toBeCloseTo(1.15 / 1.75);
+  });
+  it('never goes below 0.6 (dpr >= ~1.92)', () => {
+    expect(uiScale(1.9)).toBeGreaterThan(0.6);
+    expect(uiScale(2)).toBe(0.6);
+    expect(uiScale(4)).toBe(0.6);
+  });
+  it('caps at 1 for low-density screens and treats a missing dpr as 1', () => {
+    expect(uiScale(0.5)).toBe(1);
+    expect(uiScale(0)).toBe(1);
+    expect(uiScale(NaN)).toBe(1);
   });
 });

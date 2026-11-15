@@ -45,6 +45,9 @@ class Listener : NotificationListenerService() {
     }
 
     override fun onListenerDisconnected() {
+        // Access turned off: the car must not keep showing what it had.
+        link?.send(JSONObject().put("t", "notif-reset"))
+        CarSessionNotice.update(this, false)
         link?.close()
         link = null
     }
@@ -106,6 +109,7 @@ class Listener : NotificationListenerService() {
 
     /** Engine asks to open a notification on the car display. */
     private fun fromEngine(m: JSONObject) {
+        if (m.optString("t") == "session") return CarSessionNotice.update(this, m.optBoolean("up"))
         if (m.optString("t") != "open") return
         val id = m.optString("id")
         val sbn = tracked.remove(id) ?: return

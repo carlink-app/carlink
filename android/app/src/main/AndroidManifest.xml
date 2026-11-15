@@ -4,6 +4,8 @@
     <!-- Car auto-start: Bluetooth connect/disconnect broadcasts. -->
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <!-- The "connected to car" status notification (Android 13+ asks). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!-- Launcher apps' icons for the car launcher (package visibility). -->
     <queries>
@@ -17,9 +19,11 @@
         android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:extractNativeLibs="true"
+        android:icon="@mipmap/ic_launcher"
         android:label="carlink"
+        android:roundIcon="@mipmap/ic_launcher"
         android:supportsRtl="true"
-        android:theme="@android:style/Theme.DeviceDefault">
+        android:theme="@style/Theme.Carlink">
 
         <activity
             android:name=".ui.MainActivity"
@@ -30,6 +34,7 @@
             </intent-filter>
         </activity>
 
+        <receiver android:name=".notify.CarSessionNotice$Disconnect" android:exported="false" />
         <receiver android:name=".auto.CarReceiver" android:exported="true">
             <intent-filter>
                 <action android:name="android.bluetooth.device.action.ACL_CONNECTED" />

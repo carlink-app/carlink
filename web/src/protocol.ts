@@ -66,8 +66,10 @@ export type PhoneMsg =
   | { t: 'rate'; level: number; kbps: number }
   | { t: 'error'; msg: string }
   /** Untrusted: run through `sanitizeNotif` (notifs.ts) before use. */
-  | { t: 'notif'; id: string; pkg: string; app: string; title: string; text: string; icon?: string; kind: NotifKind }
-  | { t: 'notif-gone'; id: string };
+  | { t: 'notif'; id: string; pkg: string; app: string; title: string; text: string; icon?: string; kind: NotifKind; replay?: boolean }
+  | { t: 'notif-gone'; id: string }
+  /** Drop all shown notifications (the phone re-sends current ones, or access ended). */
+  | { t: 'notif-reset' };
 
 export type NotifKind = 'msg' | 'call' | 'nav' | 'other';
 

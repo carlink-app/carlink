@@ -9,6 +9,7 @@ import android.content.Context
 import android.os.PersistableBundle
 import android.util.Log
 import app.carlink.Prefs
+import app.carlink.notify.CarSessionNotice
 
 /**
  * Stops what auto-start started, a while after the car disconnected, unless it
@@ -44,6 +45,7 @@ class CarStopJob : JobService() {
                 }
                 Prefs.setAutoStarted(app, false)
                 Prefs.setEngineWanted(app, false)
+                CarSessionNotice.update(app, false)
             } catch (t: Throwable) {
                 Log.w(TAG, "auto stop failed: $t")
             } finally {

@@ -11,8 +11,11 @@ export const MAX_ICON = 16 * 1024;
 export const MAX_APP = 64;
 export const MAX_PKG = 255;
 
-export const MAX_VISIBLE = 3;
-export const AUTO_HIDE_MS = 8000;
+/** Pop-up banners besides ringing calls: one, so the map stays visible. */
+export const MAX_VISIBLE = 1;
+export const AUTO_HIDE_MS = 6000;
+/** Notifications kept in the tray (behind the rail's bell) until opened or dismissed. */
+export const MAX_TRAY = 20;
 
 export interface Notif {
   id: string;
@@ -74,20 +77,40 @@ const expiry = (n: Notif, now: number) => (n.kind === 'call' ? null : now + AUTO
 
 /**
  * New or updated notification. Same id: replaced in place (timer restarts).
- * New: on top; beyond MAX_VISIBLE the oldest (bottom) is dropped.
+ * New: on top. Ringing calls always stay (until notif-gone); of the rest only
+ * the newest MAX_VISIBLE pop up (older ones are still in the tray).
  */
 export function addBanner(list: readonly Banner[], n: Notif, now: number): Banner[] {
   const b: Banner = { n, expires: expiry(n, now) };
   const i = list.findIndex((x) => x.n.id === n.id);
   if (i >= 0) return list.map((x, j) => (j === i ? b : x));
-  const next = [b, ...list];
-  while (next.length > MAX_VISIBLE) {
-    // Over the cap: drop the oldest that isn't a ringing call (calls stay until notif-gone).
-    let k = next.length - 1;
-    while (k > 0 && next[k].expires === null) k--;
-    next.splice(k, 1);
-  }
-  return next;
+  let others = 0;
+  return [b, ...list].filter((x) => x.expires === null || ++others <= MAX_VISIBLE);
+}
+
+/**
+ * The tray: notifications not yet opened or dismissed, newest first. Same id:
+ * updated and moved to the top. Calls aren't kept (they're pinned while
+ * ringing and pointless afterwards).
+ */
+export function addToTray(list: readonly Notif[], n: Notif): Notif[] {
+  const rest = list.filter((x) => x.id !== n.id);
+  return n.kind === 'call' ? rest : [n, ...rest].slice(0, MAX_TRAY);
+}
+
+/** The rail's tray badge: the count, capped at "9+". */
+export const trayBadge = (count: number): string => (count > 9 ? '9+' : String(count));
+
+/** The "+N" chip on a banner: tray entries other than the banner itself. */
+export const trayOthers = (tray: readonly Notif[], id: string): number => tray.filter((t) => t.id !== id).length;
+
+/** Display order: ringing calls (no expiry) first, otherwise as queued. */
+export function callsFirst(list: readonly Banner[]): Banner[] {
+  return [...list].sort((a, b) => Number(a.expires !== null) - Number(b.expires !== null));
+}
+
+export function removeFromTray(list: readonly Notif[], id: string): Notif[] {
+  return list.filter((x) => x.id !== id);
 }
 
 export function removeBanner(list: readonly Banner[], id: string): Banner[] {

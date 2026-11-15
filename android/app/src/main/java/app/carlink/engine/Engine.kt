@@ -46,8 +46,21 @@ class Engine(private val code: String, port: Int, allow: String) : NativeCore.Li
     }
     /** Icons rendered by the carlink app (package -> data URL). */
     private var appIcons: Map<String, String> = emptyMap()
-    /** Sends to the carlink app process when it's linked (EngineService.setClient). */
+    /** Messages to the carlink app (EngineService.setClient); setting it re-sends the session state (the app may have restarted). */
     @Volatile var toApp: ((JSONObject) -> Unit)? = null
+        set(value) {
+            field = value
+            value?.invoke(sessionMsg(sessionUp))
+        }
+    @Volatile private var sessionUp = false
+
+    private fun sessionMsg(up: Boolean) = JSONObject().put("t", "session").put("up", up)
+
+    /** The app shows "connected to car" on the phone (lock screen included). */
+    private fun reportSession(up: Boolean) {
+        sessionUp = up
+        toApp?.invoke(sessionMsg(up))
+    }
 
     /** Native handle; zeroed before nativeStop so nothing uses it afterwards. */
     private val core = AtomicLong(0)
@@ -143,7 +156,10 @@ class Engine(private val code: String, port: Int, allow: String) : NativeCore.Li
                 send(JSONObject().put("t", "notif-gone").put("id", it))
             }
             // The app re-posts everything after this: drop what we had.
-            "notif-reset" -> activeNotifs.clear()
+            "notif-reset" -> {
+                activeNotifs.clear()
+                send(JSONObject().put("t", "notif-reset")) // the car drops what it shows too
+            }
             "icons" -> {
                 val list = m.optJSONArray("list") ?: return
                 val base = if (m.optBoolean("first", true)) emptyMap() else appIcons
@@ -160,12 +176,13 @@ class Engine(private val code: String, port: Int, allow: String) : NativeCore.Li
     // Native callbacks arrive on network threads: hop to the engine thread.
     override fun onSession(connected: Boolean, remote: String) = post {
         Log.i(TAG, "session ${if (connected) "up" else "down"}: $remote")
-        // Removing a display moves its apps to the phone screen. A short Wi-Fi
-        // drop or the car browser going to the background shouldn't do that:
-        // keep the panes a while; a returning car reuses them (same layout).
+        // Removing a display closes its apps. A short Wi-Fi drop or the car
+        // browser going to the background shouldn't do that: keep the panes a
+        // while; a returning car reuses them (same layout).
         handler.removeCallbacks(releaseIdlePanes)
         if (!connected) handler.postDelayed(releaseIdlePanes, PANE_GRACE_MS)
         status = if (connected) "car connected ($remote)" else "waiting for car"
+        reportSession(connected)
     }
 
     private val releaseIdlePanes = Runnable { if (core.get() != 0L) releasePanes() }
@@ -210,7 +227,9 @@ class Engine(private val code: String, port: Int, allow: String) : NativeCore.Li
                 // The page clears banners on a new session: calls in progress and
                 // recent ones come back, not old news.
                 val now = System.currentTimeMillis()
-                activeNotifs.values.filter { (n, at) -> showNow(n, at, now) }.forEach { send(it.first) }
+                // Marked as replays: the page skips ones the driver already dismissed.
+                activeNotifs.values.filter { (n, at) -> showNow(n, at, now) }
+                    .forEach { send(JSONObject(it.first.toString()).put("replay", true)) }
             }
             "layout" -> layout(m)
             "apps" -> send(JSONObject().put("t", "apps").put("list", listing().json))
@@ -247,6 +266,7 @@ class Engine(private val code: String, port: Int, allow: String) : NativeCore.Li
             "notif-open" -> {
                 val id = m.optString("id")
                 val pane = panes[0] ?: return
+                activeNotifs.remove(id) // opened: not replayed on the next connect
                 if (Notif.ID.matches(id)) toApp?.invoke(JSONObject().put("t", "open").put("id", id).put("display", pane.displayId))
             }
         }
@@ -322,6 +342,8 @@ class Engine(private val code: String, port: Int, allow: String) : NativeCore.Li
         val done = CountDownLatch(1)
         handler.post {
             releasePanes()
+            // Before the thread quits: a later onSession(false) would be dropped.
+            reportSession(false)
             val h = core.getAndSet(0)
             if (h != 0L) NativeCore.nativeStop(h)
             status = "stopped"
