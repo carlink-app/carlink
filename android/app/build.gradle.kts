@@ -14,7 +14,7 @@ android {
         // tie it to the build so an updated app never talks to an old engine.
         buildConfigField("int", "ENGINE_VERSION", "${(System.currentTimeMillis() / 1000).toInt()}")
         versionCode = 1
-        versionName = "0.1.0"
+        versionName = "0.2.0"
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
     }
 

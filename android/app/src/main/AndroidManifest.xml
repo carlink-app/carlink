@@ -20,7 +20,7 @@
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:extractNativeLibs="true"
         android:icon="@mipmap/ic_launcher"
-        android:label="carlink"
+        android:label="Carlink"
         android:roundIcon="@mipmap/ic_launcher"
         android:supportsRtl="true"
         android:theme="@style/Theme.Carlink">
@@ -51,7 +51,7 @@
         <service
             android:name=".notify.Listener"
             android:exported="true"
-            android:label="carlink: show notifications in the car"
+            android:label="Carlink: phone notifications in the car"
             android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
             <intent-filter>
                 <action android:name="android.service.notification.NotificationListenerService" />

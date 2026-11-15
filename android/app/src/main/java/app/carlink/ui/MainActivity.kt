@@ -119,8 +119,8 @@ class MainActivity : Activity() {
 
     private fun buildScreen(): View {
         val content = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        content.addView(ui.text(26f, bold = true).apply { text = "carlink" })
-        content.addView(ui.line("Phone apps on the car screen").apply { setPadding(0, 0, 0, ui.dp(16)) })
+        content.addView(ui.text(26f, bold = true).apply { text = "Carlink" })
+        content.addView(ui.line("Your phone's apps on the car screen").apply { setPadding(0, 0, 0, ui.dp(16)) })
 
         statusCard(content)
         pairingCard(content)
@@ -175,7 +175,7 @@ class MainActivity : Activity() {
         card.addView(LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            addView(ui.line("Type it once in the car page. A new code must be typed again."), LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+            addView(ui.line("Enter it once on the car page. After a new code, enter it there again."), LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
             addView(ui.textButton("New code") { newCode() })
         })
     }
@@ -184,7 +184,7 @@ class MainActivity : Activity() {
         val card = ui.card(parent, "Car connection")
         hotspotChoice = ui.segmented(listOf("Car hotspot", "Normal hotspot")) { i -> setHotspot(car = i == 0) }
         card.addView(hotspotChoice, fullWidth(top = 4))
-        hotspotView = ui.line("Car hotspot gives the phone a fixed address the car page can find.")
+        hotspotView = ui.line("Car hotspot gives the phone the fixed address the car page connects to.")
         card.addView(hotspotView)
         card.addView(ui.row("Phone address", Hotspot.PHONE), fullWidth(top = 8))
         card.addView(ui.row("Car page", CAR_PAGE))
@@ -215,7 +215,7 @@ class MainActivity : Activity() {
     private fun diagnosticsCard(parent: LinearLayout) {
         val card = ui.card(parent, "Diagnostics")
         card.addView(ui.button("Engine log", primary = false) { showLog() }, fullWidth(top = 4))
-        diagView = ui.line("carlink ${BuildConfig.VERSION_NAME}", size = 12f)
+        diagView = ui.line("Carlink ${BuildConfig.VERSION_NAME}", size = 12f)
         card.addView(diagView)
         Prefs.devAllow(this).takeIf { it.isNotEmpty() }?.let { dev ->
             card.addView(ui.line("DEV: car page also accepted from $dev (files/dev_allow)", size = 12f, color = Ui.WARN))
@@ -228,7 +228,7 @@ class MainActivity : Activity() {
 
     private fun startEngine() {
         if (!Shizuku.pingBinder()) {
-            setStatus("Shizuku isn't running. Open Shizuku and start it (Wireless debugging).")
+            setStatus("Shizuku isn't running. Open Shizuku and start it (Wireless debugging or USB).")
             return
         }
         if (Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) {
@@ -303,7 +303,7 @@ class MainActivity : Activity() {
         engineRunning = running
         stateView.text = state
         ui.setDot(stateDot, color)
-        certView.text = "Certificate $cert (the car page shows the same)"
+        certView.text = "Certificate $cert (the car page's debug view shows the same)"
         certView.visibility = if (cert != null) View.VISIBLE else View.GONE
         engineButton.text = if (running) "Stop engine" else "Start engine"
         ui.stylePrimary(engineButton, primary = !running)
@@ -336,7 +336,7 @@ class MainActivity : Activity() {
         call(onResult = { r ->
             if (r == "ok") {
                 ui.selectSegment(hotspotChoice, if (car) 0 else 1)
-                showHotspot(if (car) "Car hotspot on. Join it from the car, then open the car page." else "Normal hotspot on.", Ui.OK)
+                showHotspot(if (car) "Car hotspot is on. Join it from the car, then open the car page." else "Normal hotspot is on.", Ui.OK)
             } else {
                 showHotspot("Hotspot: $r", Ui.ERR)
             }
@@ -356,7 +356,7 @@ class MainActivity : Activity() {
 
     private fun showNotifications() {
         notifSwitch.isChecked = notificationsOn()
-        notifView.text = "New phone notifications appear as banners in the car. Content hidden on the lock screen stays hidden."
+        notifView.text = "New notifications appear as banners in the car. What your lock screen hides stays hidden."
     }
 
     /**
@@ -383,7 +383,7 @@ class MainActivity : Activity() {
     /** Recent engine log (logcat as shell), to read or share after a car test. */
     private fun showLog() {
         val e = engine ?: run {
-            diagView.text = "Start the engine first to read its log."
+            diagView.text = "Start the engine first to see its log."
             return
         }
         thread {
@@ -399,7 +399,7 @@ class MainActivity : Activity() {
                     .setTitle("Engine log")
                     .setView(ScrollView(this).apply { addView(view) })
                     .setPositiveButton("Share") { _, _ ->
-                        startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, log), "carlink log"))
+                        startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, log), "Carlink engine log"))
                     }
                     .setNegativeButton("Close", null)
                     .show()
@@ -412,7 +412,7 @@ class MainActivity : Activity() {
     private fun showCar(note: String? = null) {
         val name = Prefs.carName(this)
         carName.text = name ?: "No car chosen"
-        carView.text = note ?: if (name != null) "The engine and car hotspot start when it connects." else "Start the engine by hand, or choose the car to start automatically."
+        carView.text = note ?: if (name != null) "The engine and car hotspot start when the car connects." else "Start the engine yourself, or choose your car so it starts automatically."
         carView.setTextColor(if (note != null) Ui.WARN else Ui.MUTED)
         carButton.text = if (name != null) "Change car" else "Choose car"
     }
@@ -427,7 +427,7 @@ class MainActivity : Activity() {
         val adapter = getSystemService(BluetoothManager::class.java)?.adapter
         val devices = adapter?.bondedDevices?.sortedBy { it.name ?: "" }.orEmpty()
         if (devices.isEmpty()) {
-            showCar("No paired Bluetooth devices. Pair the phone with the car first.")
+            showCar("No paired Bluetooth devices. Pair the phone with your car first.")
             return
         }
         val labels = devices.map { it.name ?: it.address }.toTypedArray<CharSequence>() + "None (no auto-start)"
@@ -445,6 +445,6 @@ class MainActivity : Activity() {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode != REQ_BLUETOOTH) return
         if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) chooseCar()
-        else showCar("Bluetooth permission is needed to start with the car.")
+        else showCar("Bluetooth permission is needed to start automatically with the car.")
     }
 }

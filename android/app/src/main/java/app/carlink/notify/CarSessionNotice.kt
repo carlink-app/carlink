@@ -29,7 +29,7 @@ object CarSessionNotice {
         if (!up) return nm.cancel(ID)
         nm.createNotificationChannel(
             NotificationChannel(CHANNEL, "Car connection", NotificationManager.IMPORTANCE_LOW).apply {
-                description = "Shown while the car shows your phone's apps"
+                description = "Shown while your phone's apps are on the car screen"
                 setShowBadge(false)
             },
         )
