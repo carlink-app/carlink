@@ -1,0 +1,15 @@
+spike/bin/
+spike/clip.h264
+spike/web/clip.h264
+spike/bin/reports/
+spike/wt-seed
+spike/dist/
+spike/web/config.json
+spike/rig-reports/
+core/target/
+spike/clip.hevc
+*.jks
+*.keystore
+.env*
+.idea/
+*.iml

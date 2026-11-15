@@ -1,0 +1,29 @@
+[package]
+name = "carlink_core"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+android_logger = "0.15.1"
+anyhow = "1.0.104"
+base64 = "0.22"
+jni = "0.21"
+log = "0.4.35"
+p256 = { version = "0.14", features = ["ecdsa", "pkcs8"] }
+ring = "0.17"
+serde_json = "1.0.154"
+sha2 = "0.11"
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "sync", "time", "macros"] }
+wtransport = { version = "0.7", default-features = false, features = ["ring", "quinn"] }
+
+[dev-dependencies]
+hex = "0.4.3"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"

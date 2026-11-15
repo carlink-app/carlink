@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <meta name="theme-color" content="#000000">
+  <title>carlink</title>
+  <link rel="icon" href="data:,">
+</head>
+<body>
+  <div id="app">
+    <nav id="rail">
+      <button id="btn-home" class="rail-btn" aria-label="Apps">
+        <svg viewBox="0 0 24 24"><path d="M4 4h4v4H4zm6 0h4v4h-4zm6 0h4v4h-4zM4 10h4v4H4zm6 0h4v4h-4zm6 0h4v4h-4zM4 16h4v4H4zm6 0h4v4h-4zm6 0h4v4h-4z"/></svg>
+      </button>
+      <div id="recents"></div>
+      <button id="btn-back" class="rail-btn" aria-label="Back">
+        <svg viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20z"/></svg>
+      </button>
+      <button id="btn-settings" class="rail-btn small" aria-label="Settings">
+        <svg viewBox="0 0 24 24"><path d="M19.14 12.94a7.07 7.07 0 0 0 0-1.88l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7 7 0 0 0-1.63-.94l-.36-2.54A.5.5 0 0 0 13.9 2h-3.84a.5.5 0 0 0-.49.42l-.36 2.54c-.59.24-1.13.56-1.63.94l-2.39-.96a.5.5 0 0 0-.6.22L2.67 8.48a.5.5 0 0 0 .12.64l2.03 1.58a7.07 7.07 0 0 0 0 1.88l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32c.13.22.39.3.6.22l2.39-.96c.5.38 1.04.7 1.63.94l.36 2.54c.04.24.25.42.49.42h3.84c.24 0 .45-.18.49-.42l.36-2.54c.59-.24 1.13-.56 1.63-.94l2.39.96c.22.08.47 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.64zM12 15.5A3.5 3.5 0 1 1 12 8.5a3.5 3.5 0 0 1 0 7z"/></svg>
+      </button>
+      <button id="clock" aria-label="Clock (tap for debug info)"><span id="clock-time">--:--</span><span id="conn-dot"></span></button>
+    </nav>
+    <main id="main">
+      <div id="panes"></div>
+      <section id="launcher">
+        <div id="launcher-msg"></div>
+        <div id="grid"></div>
+      </section>
+      <div id="notifs" aria-live="polite"></div>
+      <div id="status"></div>
+      <div id="toast"></div>
+      <pre id="debug" hidden></pre>
+    </main>
+  </div>
+
+  <div id="pairing" hidden>
+    <form id="pairing-form" autocomplete="off">
+      <h1>Pair with your phone</h1>
+      <p>Open carlink on the phone and enter the pairing code it shows.</p>
+      <label>Pairing code
+        <input id="f-code" name="code" placeholder="ABCD-EFGH-JKLM" autocapitalize="characters" spellcheck="false" aria-describedby="f-code-hint" required>
+        <span id="f-code-hint" class="field-hint"></span>
+      </label>
+      <div class="row">
+        <label class="grow">Phone address
+          <input id="f-host" name="host" inputmode="decimal" spellcheck="false" required>
+        </label>
+        <label>Port
+          <input id="f-port" name="port" inputmode="numeric" pattern="[0-9]*" required>
+        </label>
+      </div>
+      <p id="f-error" class="form-error"></p>
+      <div class="row buttons">
+        <button type="button" id="f-cancel" class="secondary">Close</button>
+        <button type="submit" class="primary">Save &amp; connect</button>
+      </div>
+    </form>
+    <section id="display" aria-labelledby="display-h">
+      <h2 id="display-h">Display <span class="hint">applies right away</span></h2>
+      <div class="setting">
+        <span class="setting-label" id="showtext-label">Show message text</span>
+        <button type="button" id="f-showtext" class="switch" role="switch" aria-checked="true" aria-labelledby="showtext-label"><span></span></button>
+      </div>
+    </section>
+  </div>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

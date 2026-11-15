@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>carlink benchmark</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 18px/1.4 system-ui, sans-serif; background: #111; color: #eee; }
+  main { display: grid; grid-template-columns: 560px 1fr; height: 100vh; }
+  #side { overflow-y: auto; padding: 16px; border-right: 1px solid #333; }
+  #stage { position: relative; background: #000; display: flex; flex-direction: column; min-width: 0; }
+  #canvasBox { flex: 1; display: flex; align-items: center; justify-content: center; min-height: 0; }
+  canvas { max-width: 100%; max-height: 100%; aspect-ratio: 16 / 10; background: #000; }
+  #stats { position: absolute; top: 8px; left: 8px; background: rgba(0,0,0,.7); padding: 8px 12px;
+           font: 16px/1.35 ui-monospace, monospace; white-space: pre; pointer-events: none; }
+  #results { max-height: 45%; overflow: auto; border-top: 1px solid #333; }
+  #results table { font: 14px/1.3 ui-monospace, monospace; }
+  #results th, #results td { padding: 3px 8px; text-align: right; border-bottom: 1px solid #222; white-space: nowrap; }
+  #results th:first-child, #results td:first-child { text-align: left; }
+  h1 { font-size: 22px; margin: 0 0 8px; }
+  h2 { font-size: 18px; margin: 16px 0 6px; color: #9cf; }
+  table { border-collapse: collapse; width: 100%; font-size: 15px; }
+  #features td { padding: 3px 6px; border-bottom: 1px solid #222; vertical-align: top; word-break: break-word; }
+  #features td:first-child { color: #aaa; width: 45%; }
+  .ok { color: #6d6; } .bad { color: #f66; } .warn { color: #fc6; }
+  label { display: block; margin: 8px 0 2px; color: #aaa; font-size: 15px; }
+  input, select { width: 100%; font-size: 20px; padding: 8px; background: #222; color: #eee; border: 1px solid #444; border-radius: 6px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 8px; }
+  .row { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  button { flex: 1; min-width: 120px; font-size: 20px; padding: 14px; border: 0; border-radius: 8px; background: #2a6; color: #fff; }
+  button.secondary { background: #444; }
+  button:disabled { opacity: .4; }
+  #log { font: 14px/1.3 ui-monospace, monospace; white-space: pre-wrap; color: #ccc; max-height: 220px; overflow-y: auto; }
+  details summary { cursor: pointer; color: #9cf; font-size: 18px; margin-top: 16px; }
+</style>
+</head>
+<body>
+<main>
+  <section id="side">
+    <h1>carlink benchmark</h1>
+    <div id="origin"></div>
+
+    <label for="host">Phone host (IP or hostname)</label>
+    <input id="host" placeholder="9.9.0.1" autocapitalize="off" autocomplete="off">
+    <div class="row">
+      <button id="suite">Run benchmark</button>
+      <button id="stop" class="secondary" disabled>Stop</button>
+    </div>
+    <div id="suiteStatus"></div>
+
+    <details>
+      <summary>Single test</summary>
+      <label for="mode">Mode</label>
+      <select id="mode">
+        <option value="local">Local decode (no network)</option>
+        <option value="wt-video">WebTransport video + ping</option>
+        <option value="wt-ping">WebTransport ping only</option>
+        <option value="ws-video">WebSocket video + ping</option>
+        <option value="ws-ping">WebSocket ping only</option>
+      </select>
+      <div class="grid2">
+        <div>
+          <label for="codec">Codec</label>
+          <select id="codec"><option>h264</option><option>hevc</option></select>
+        </div>
+        <div>
+          <label for="renderer">Renderer</label>
+          <select id="renderer"><option>2d</option><option>webgl</option><option>bitmap</option></select>
+        </div>
+        <div>
+          <label for="hw">Decoder</label>
+          <select id="hw"><option>no-preference</option><option>prefer-hardware</option><option>prefer-software</option></select>
+        </div>
+        <div>
+          <label for="pingInterval">Ping every</label>
+          <select id="pingInterval"><option value="20">20 ms</option><option value="200">200 ms</option><option value="1000">1000 ms</option></select>
+        </div>
+        <div>
+          <label for="priority">Wi-Fi priority (DSCP)</label>
+          <select id="priority"><option value="0">off</option><option value="1">on</option></select>
+        </div>
+      </div>
+      <div class="row"><button id="start">Start</button></div>
+    </details>
+
+    <div class="row">
+      <button id="report" class="secondary">Send report to phone</button>
+      <button id="fs" class="secondary">Fullscreen</button>
+    </div>
+
+    <h2>Log</h2>
+    <div id="log"></div>
+
+    <h2>Features</h2>
+    <table id="features"></table>
+  </section>
+  <section id="stage">
+    <div id="canvasBox"><canvas id="canvas" width="1920" height="1200"></canvas></div>
+    <div id="stats">idle</div>
+    <div id="results"></div>
+  </section>
+</main>
+<script type="module" src="main.js"></script>
+</body>
+</html>
