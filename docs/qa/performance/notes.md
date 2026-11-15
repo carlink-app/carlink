@@ -49,6 +49,27 @@ continuously so frame gaps mean freezes.
   batches from an earlier session, profiler takes the pairing code from
   `CARLINK_CODE` and deletes its browser profile.
 
+## Follow-up passes (after the first commit)
+
+- Test coverage: ~30 tests (web 175 total, Android `AppsIconsTest`, core
+  `app-icons` as a heavy message). Helpers extracted for testing:
+  `chunkByBytes`, `acceptIcons`, `refreshRecents`, `DrawGaps`,
+  `Apps.withIcons`. Found: names with control characters could make a request
+  line too long; requests now only carry valid package names.
+- Simplify: shared constants, `DrawGaps.takeMaxGapMs`, comment cleanups.
+- Manual QA on the Pixel:
+
+| # | Check | Result |
+|---|---|---|
+| 1 | First connect in a fresh car browser | 198 icons fetched after the first frame |
+| 2 | Second connect, same browser | 0 icons requested; all 198 shown within 1 s (from the cache) |
+| 3 | Previous page version (367c071, built locally) against the new engine | 198 icons inline (old pages keep icons) |
+| 4 | Profiler after all changes: cold / quick reconnect | first frame 4.2 s (Waze cold start) / 97 ms; 60 fps; 0 stalls; system_server unchanged |
+
+The live GitHub Pages page couldn't be tested from the desktop against the
+phone's home-Wi-Fi address (Chrome blocks public sites from private
+addresses); in the car the phone is 9.9.0.1, which isn't affected.
+
 ## Next
 
 - Car test: read `gap max` / `stalls` in the overlay during the first minute.

@@ -4,10 +4,10 @@
 // handling time, main-thread long tasks, and fps per second.
 //
 // Usage: CARLINK_CODE=XXXX-XXXX-XXXX node dev/perf-startup.mjs --host 192.168.x.y
+//          [--page http://127.0.0.1:4173/] [--seconds 12] [--cpu 4] [--app Waze]
 // The pairing code is a secret: it comes from the environment, not the command
 // line (visible to other local users), and the temporary browser profile is
 // deleted afterwards.
-//          [--page http://127.0.0.1:4173/] [--seconds 12] [--cpu 4] [--app Waze]
 // --cpu N slows the page's CPU N times (the car's computer is slower than a desktop).
 // Needs `vite preview` serving web/dist and a running engine that accepts
 // this machine (debug build: files/dev_allow).

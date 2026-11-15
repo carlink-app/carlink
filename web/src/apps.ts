@@ -35,3 +35,15 @@ export function afterClose(recents: readonly AppInfo[], current: string | null, 
   const wasCurrent = current === pkg;
   return { recents: rest, wasCurrent, next: wasCurrent ? rest[0] ?? null : null };
 }
+
+/**
+ * Recents with labels/icons refreshed from the phone's list. A stored icon is
+ * kept until the phone's arrives (icons are fetched after the first frame).
+ */
+export function refreshRecents(recents: readonly AppInfo[], apps: readonly AppInfo[]): AppInfo[] {
+  return recents.map((r) => {
+    const a = apps.find((x) => x.pkg === r.pkg && x.cls === r.cls);
+    if (!a) return r;
+    return a.icon || !r.icon ? a : { ...a, icon: r.icon };
+  });
+}

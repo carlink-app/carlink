@@ -8,7 +8,7 @@ import {
   type FromWorker, type PaneStats, type ToWorker,
 } from './protocol';
 import { Reorderer } from './reorder';
-import { Samples } from './stats';
+import { DrawGaps, Samples } from './stats';
 
 const scope = self as unknown as {
   postMessage(m: FromWorker): void;
@@ -39,11 +39,7 @@ class PaneDecoder {
 
   // Stats.
   private drawn = 0;
-  private lastDraw = 0;
-  /** Phone timestamp (µs) of the last drawn frame. */
-  private lastPts = 0;
-  private maxGap: number | null = null;
-  private stalls = 0;
+  private gaps = new DrawGaps();
   private decodeMs = new Samples(600);
   private droppedDecoded = 0;
   private errors = 0;
@@ -163,19 +159,7 @@ class PaneDecoder {
       }
       this.ctx.drawImage(f, 0, 0);
       this.drawn++;
-      const now = performance.now();
-      if (this.lastDraw) {
-        const gap = now - this.lastDraw;
-        this.maxGap = Math.max(this.maxGap ?? 0, gap);
-        // A freeze: the frame came much later than the phone made it (a still
-        // screen has a big gap in both and doesn't count).
-        const ptsGapMs = (f.timestamp - this.lastPts) / 1000;
-        if (gap - ptsGapMs > STALL_MS) this.stalls++;
-      } else {
-        post({ type: 'firstDraw', pane: this.id });
-      }
-      this.lastDraw = now;
-      this.lastPts = f.timestamp;
+      if (this.gaps.draw(performance.now(), f.timestamp)) post({ type: 'firstDraw', pane: this.id });
     }
     this.width = f.displayWidth;
     this.height = f.displayHeight;
@@ -185,9 +169,7 @@ class PaneDecoder {
   /** New session: sequence numbers restart; freeze counting starts over. */
   reset() {
     this.seq.reset();
-    this.lastDraw = 0;
-    this.stalls = 0;
-    this.maxGap = null;
+    this.gaps.reset();
   }
 
   stats(): PaneStats {
@@ -204,11 +186,10 @@ class PaneDecoder {
       queue: this.decoder?.decodeQueueSize ?? 0,
       errors: this.errors,
       waitingKey: this.seq.syncing,
-      maxGapMs: this.maxGap === null ? null : Math.round(this.maxGap),
-      stalls: this.stalls,
+      maxGapMs: this.gaps.takeMaxGapMs(),
+      stalls: this.gaps.stalls,
     };
     this.drawn = 0;
-    this.maxGap = null;
     return s;
   }
 }
@@ -251,9 +232,6 @@ scope.onmessage = (e) => {
     }
   }
 };
-
-/** A frame this much later than its phone timestamp says is a visible freeze. */
-const STALL_MS = 250;
 
 setInterval(() => panes.forEach((p) => p.seq.tick()), 50);
 setInterval(() => panes.forEach((p) => post({ type: 'stats', stats: p.stats() })), 1000);

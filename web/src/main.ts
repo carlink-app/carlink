@@ -8,8 +8,8 @@ import type { Codec } from './h26x';
 import { PANE_DPI, type AppInfo, type FromWorker, type PageMsg, type PaneLayout, type PaneStats, type PhoneMsg, type ToWorker } from './protocol';
 import { makeCert, weekStart } from './cert';
 import { ErrorWindow, fingerprint, LogRing, maskCode, resolveCode, shortUA, utcStamp } from './diag';
-import { afterClose, groupApps } from './apps';
-import { applyCache, loadIcons, MAX_CACHED, saveIcons, validIcon, type CachedIcon } from './iconcache';
+import { afterClose, groupApps, refreshRecents } from './apps';
+import { acceptIcons, applyCache, chunkByBytes, ICON_REQUEST_BYTES, loadIcons, MAX_CACHED, saveIcons, validIcon, type CachedIcon } from './iconcache';
 import {
   addBanner, addToTray, callsFirst, nextExpiry, pruneExpired, removeBanner, removeFromTray, sanitizeNotif, trayBadge, trayOthers, validId,
   type Banner, type Notif,
@@ -237,9 +237,6 @@ function onMessage(m: PhoneMsg) {
     case 'launched': if (m.pane === 0 && m.pkg === openingPkg) openingDone(OPENING_AFTER_LAUNCH_MS); break;
   }
 }
-
-/** Startup timing marks (performance.mark) for dev/perf tools. */
-let firstFrameMarked = false;
 
 // ---------- notification banners and tray ----------
 
@@ -507,6 +504,8 @@ function toast(text: string) {
 
 // ---------- app icons: cached in the browser, fetched after the first frame ----------
 
+/** Set at the first drawn frame of a session (marked for dev/perf-startup.mjs); icons wait for it. */
+let firstFrameMarked = false;
 let iconCache = new Map<string, CachedIcon>();
 // A storage that never answers mustn't hold up the launcher.
 const iconCacheReady = Promise.race([loadIcons(), new Promise<Map<string, CachedIcon>>((r) => setTimeout(() => r(new Map()), 500))])
@@ -516,15 +515,15 @@ let missingIcons: string[] = [];
 const requestedIcons = new Set<string>();
 let iconsTimer = 0;
 let iconsRender = 0;
-/** Under the phone's 16 KB control line limit, with room to spare. */
-const ICON_REQUEST_BYTES = 12_000;
 const MAX_PKG_CHARS = 255;
+/** Android package names (also keeps every name one JSON byte per character). */
+const PKG_RE = /^[A-Za-z0-9_.]+$/;
 
 async function onApps(list: AppInfo[]) {
   await iconCacheReady;
   const t0 = performance.now();
   const valid = list.filter((a) => a && typeof a.pkg === 'string');
-  missingIcons = applyCache(valid, iconCache).filter((p) => p.length <= MAX_PKG_CHARS).slice(0, MAX_CACHED);
+  missingIcons = applyCache(valid, iconCache).filter((p) => p.length <= MAX_PKG_CHARS && PKG_RE.test(p)).slice(0, MAX_CACHED);
   setApps(valid);
   performance.measure('carlink:apps', { start: t0, end: performance.now(), detail: { count: apps.length, missingIcons: missingIcons.length } });
   void saveIcons(new Map(), new Set(valid.map((a) => a.pkg))); // forget uninstalled apps
@@ -538,32 +537,15 @@ async function onApps(list: AppInfo[]) {
 function requestIcons() {
   clearTimeout(iconsTimer);
   requestedIcons.clear();
+  for (const p of missingIcons) requestedIcons.add(p);
   // Split by size: one line must stay under the phone's control line limit.
-  let pkgs: string[] = [];
-  let bytes = 0;
-  const flush = () => { if (pkgs.length) send({ t: 'app-icons', pkgs }); pkgs = []; bytes = 0; };
-  for (const p of missingIcons) {
-    if (bytes + p.length + 3 > ICON_REQUEST_BYTES) flush();
-    pkgs.push(p);
-    bytes += p.length + 3;
-    requestedIcons.add(p);
-  }
-  flush();
+  for (const pkgs of chunkByBytes(missingIcons, ICON_REQUEST_BYTES)) send({ t: 'app-icons', pkgs });
   missingIcons = [];
 }
 
 function onIcons(list: { pkg: string; ih: string; icon: string }[]) {
-  const add = new Map<string, CachedIcon>();
-  for (const it of list) {
-    // Only icons we asked for, and only valid ones (size-capped PNG).
-    if (!it || typeof it.pkg !== 'string' || !requestedIcons.delete(it.pkg) || !validIcon(it.icon)) continue;
-    for (const a of apps) {
-      // Same hash only: the phone's list may have changed since ours.
-      if (a.pkg !== it.pkg || typeof a.ih !== 'string' || a.ih !== it.ih) continue;
-      a.icon = it.icon;
-      add.set(a.pkg, { h: a.ih, icon: it.icon });
-    }
-  }
+  // Only icons we asked for, valid (size-capped PNG), with the hash our list has.
+  const add = acceptIcons(list, apps, requestedIcons);
   if (!add.size) return;
   void saveIcons(add);
   for (const [k, v] of add) iconCache.set(k, v);
@@ -609,13 +591,7 @@ function iconEl(label: string, src: string | undefined): HTMLElement {
 
 function setApps(list: AppInfo[]) {
   apps = list.filter((a) => a && typeof a.pkg === 'string');
-  // Refresh recents' icons/labels from the phone's list.
-  // Keep a stored icon until the phone's arrives (fetched after the first frame).
-  recents = recents.map((r) => {
-    const a = apps.find((x) => x.pkg === r.pkg && x.cls === r.cls);
-    if (!a) return r;
-    return a.icon || !r.icon ? a : { ...a, icon: r.icon };
-  });
+  recents = refreshRecents(recents, apps);
   renderRecents();
   $('grid').replaceChildren(...groupApps(apps).map((g) => {
     const section = document.createElement('section');

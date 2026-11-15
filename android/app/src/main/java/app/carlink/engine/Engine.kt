@@ -246,13 +246,7 @@ class Engine(private val code: String, port: Int, allow: String) : NativeCore.Li
             "apps" -> {
                 val l = listing()
                 // Pages from before icon caching need the icons inline.
-                val list = if (iconsByHash) l.json else JSONArray().also { out ->
-                    for (i in 0 until l.json.length()) {
-                        val a = JSONObject(l.json.getJSONObject(i).toString())
-                        l.icons[a.getString("pkg")]?.let { a.put("icon", it) }
-                        out.put(a)
-                    }
-                }
+                val list = if (iconsByHash) l.json else Apps.withIcons(l.json, l.icons)
                 send(JSONObject().put("t", "apps").put("list", list))
             }
             // Icons the car doesn't have yet, a few per message so video keeps flowing.

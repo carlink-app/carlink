@@ -24,6 +24,15 @@ object Apps {
     /** Short, stable id of an icon: the car keeps icons and only asks for changed ones. */
     fun iconHash(icon: String): String = Integer.toHexString(icon.hashCode()) + "-" + icon.length
 
+    /** A copy of [json] with each app's icon inline (for pages from before icon caching). */
+    fun withIcons(json: JSONArray, icons: Map<String, String>): JSONArray = JSONArray().also { out ->
+        for (i in 0 until json.length()) {
+            val a = JSONObject(json.getJSONObject(i).toString())
+            icons[a.getString("pkg")]?.let { a.put("icon", it) }
+            out.put(a)
+        }
+    }
+
     /**
      * Launchable apps with small PNG icons, for the car launcher grid (the
      * page sorts). [icons] (package -> data URL) come from the carlink app

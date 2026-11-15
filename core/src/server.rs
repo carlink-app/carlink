@@ -703,7 +703,7 @@ mod tests {
     #[test]
     fn control_validation_types() {
         // Every page->phone type in PROTOCOL.md passes, including milestone 3's notif-open.
-        for t in ["hello", "layout", "apps", "launch", "touch", "key", "keyframe", "notif-open", "close", "close-all"] {
+        for t in ["hello", "layout", "apps", "launch", "touch", "key", "keyframe", "notif-open", "close", "close-all", "app-icons"] {
             assert!(validate_control(&format!(r#"{{"t":"{t}"}}"#)).is_some(), "{t}");
         }
         let (open, _) = validate_control(r#"{"t":"notif-open","id":"n3f9a1c"}"#).unwrap();
@@ -724,6 +724,8 @@ mod tests {
         assert_eq!(kind(r#"{"t":"touch","pane":0,"a":"up","id":0,"x":1,"y":2}"#), Kind::Other);
         assert_eq!(kind(r#"{"t":"launch","pane":0,"pkg":"a","cls":"b"}"#), Kind::Heavy);
         assert_eq!(kind(r#"{"t":"close-all","pane":0}"#), Kind::Heavy);
+        assert_eq!(kind(r#"{"t":"app-icons","pkgs":["com.waze","com.spotify.music"]}"#), Kind::Heavy);
+        assert_eq!(kind(r#"{"t":"apps"}"#), Kind::Heavy);
         assert_eq!(kind(r#"{"t":"keyframe","pane":0}"#), Kind::Other);
     }
 

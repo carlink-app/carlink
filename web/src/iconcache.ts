@@ -11,6 +11,8 @@ export interface CachedIcon { h: string; icon: string }
 export const MAX_ICON_CHARS = 64 * 1024;
 /** More launchable apps than any phone has. */
 export const MAX_CACHED = 500;
+/** Budget per `app-icons` request: under the phone's 16 KB control line limit, with room to spare. */
+export const ICON_REQUEST_BYTES = 12_000;
 const PNG = 'data:image/png;base64,';
 
 /** What may be stored or shown from the cache. */
@@ -81,4 +83,45 @@ export function applyCache<T extends { pkg: string; ih?: string; icon?: string }
     else missing.push(a.pkg);
   }
   return missing;
+}
+
+/**
+ * Splits package names into `app-icons` requests of at most [budget] bytes
+ * each, counting a name as its length plus 3 (quotes and comma). A name over
+ * the budget goes alone in its own chunk.
+ */
+export function chunkByBytes(pkgs: readonly string[], budget: number): string[][] {
+  const out: string[][] = [];
+  let chunk: string[] = [];
+  let bytes = 0;
+  for (const p of pkgs) {
+    if (bytes + p.length + 3 > budget && chunk.length) { out.push(chunk); chunk = []; bytes = 0; }
+    chunk.push(p);
+    bytes += p.length + 3;
+  }
+  if (chunk.length) out.push(chunk);
+  return out;
+}
+
+/**
+ * Takes icons from an `app-icons` message: only packages in [requested]
+ * (removed from it as they arrive), only valid icons, and only where the
+ * app's hash in [apps] matches (the phone's list may have changed since ours).
+ * Sets the icons on [apps] in place; returns what to cache.
+ */
+export function acceptIcons(
+  list: readonly { pkg: string; ih: string; icon: string }[],
+  apps: readonly { pkg: string; ih?: string; icon?: string }[],
+  requested: Set<string>,
+): Map<string, CachedIcon> {
+  const add = new Map<string, CachedIcon>();
+  for (const it of list) {
+    if (!it || typeof it.pkg !== 'string' || !requested.delete(it.pkg) || !validIcon(it.icon)) continue;
+    for (const a of apps) {
+      if (a.pkg !== it.pkg || typeof a.ih !== 'string' || a.ih !== it.ih) continue;
+      a.icon = it.icon;
+      add.set(a.pkg, { h: a.ih, icon: it.icon });
+    }
+  }
+  return add;
 }

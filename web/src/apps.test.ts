@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { afterClose, groupApps } from './apps';
+import { afterClose, groupApps, refreshRecents } from './apps';
 import type { AppInfo } from './protocol';
 
 const app = (pkg: string, label: string, cat?: string): AppInfo => ({ pkg, cls: `${pkg}.Main`, label, cat } as AppInfo);
@@ -89,5 +89,37 @@ describe('afterClose edge cases', () => {
     expect(r.recents.map((a) => a.pkg)).toEqual(['waze']);
     expect(r.next?.pkg).toBe('waze');
     expect(multi.length).toBe(3);
+  });
+});
+
+describe('refreshRecents', () => {
+  const PNG = 'data:image/png;base64,AAAA';
+  const OLD = 'data:image/png;base64,OLD';
+  const r = (pkg: string, extra: Partial<AppInfo> = {}): AppInfo => ({ pkg, cls: `${pkg}.Main`, label: `old ${pkg}`, ...extra });
+
+  it("takes the phone's label and icon", () => {
+    const out = refreshRecents([r('a', { icon: OLD })], [{ ...r('a'), label: 'A', icon: PNG }]);
+    expect(out).toEqual([{ ...r('a'), label: 'A', icon: PNG }]);
+  });
+  it("keeps the stored icon until the phone's arrives, with the phone's label", () => {
+    const phone = { ...r('a'), label: 'A', ih: 'h1' };
+    const out = refreshRecents([r('a', { icon: OLD })], [phone]);
+    expect(out).toEqual([{ ...phone, icon: OLD }]);
+    expect(phone.icon).toBeUndefined(); // the phone's list isn't changed
+  });
+  it('no stored icon and none from the phone: the phone entry as is', () => {
+    const phone = { ...r('a'), label: 'A' };
+    expect(refreshRecents([r('a')], [phone])[0]).toBe(phone);
+  });
+  it('recents not on the phone (or another activity) are kept unchanged, order kept', () => {
+    const b = r('b', { icon: OLD });
+    const otherCls = r('a', { cls: 'a.Other' });
+    const out = refreshRecents([b, otherCls], [{ ...r('a'), icon: PNG }]);
+    expect(out[0]).toBe(b);
+    expect(out[1]).toBe(otherCls);
+  });
+  it('empty inputs', () => {
+    expect(refreshRecents([], [r('a')])).toEqual([]);
+    expect(refreshRecents([r('a')], [])).toEqual([r('a')]);
   });
 });
