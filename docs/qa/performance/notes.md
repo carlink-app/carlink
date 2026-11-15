@@ -70,6 +70,15 @@ The live GitHub Pages page couldn't be tested from the desktop against the
 phone's home-Wi-Fi address (Chrome blocks public sites from private
 addresses); in the car the phone is 9.9.0.1, which isn't affected.
 
+## User test (desktop, full-screen 2x window)
+
+Dragging was choppy: the window asked the phone for a 3724x1922 stream (7.2 MP,
+7x the car's default), so the phone dropped frames (34-46 fps, `encoded 6`),
+decode p95 26 ms, one stall. Not touch input (moves are throttled, none were
+dropped). Fix: the stream is capped at the Tesla's whole screen (1920x1200,
+`capPane`), same dp layout, scaled up on the page. After: 2112x1090, 49 fps,
+decode p95 9 ms, 1 dropped, 0 stalls.
+
 ## Next
 
 - Car test: read `gap max` / `stalls` in the overlay during the first minute.

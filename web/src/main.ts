@@ -14,7 +14,7 @@ import {
   addBanner, addToTray, callsFirst, nextExpiry, pruneExpired, removeBanner, removeFromTray, sanitizeNotif, trayBadge, trayOthers, validId,
   type Banner, type Notif,
 } from './notifs';
-import { effective, loadSaved, paneDpi, sameEndpoint, save, saveDisplay, uiScale, validPort, type Settings } from './settings';
+import { capPane, effective, loadSaved, paneDpi, sameEndpoint, save, saveDisplay, uiScale, validPort, type Settings } from './settings';
 import { Samples } from './stats';
 import { attachTouch } from './touch';
 
@@ -77,14 +77,15 @@ function addPane(id: number): Pane {
 
 const even = (n: number) => Math.max(2, Math.floor(n / 2) * 2);
 
-/** Pane sizes in device pixels: CSS size × devicePixelRatio, rounded down to even; dpi to match. */
+/** Pane sizes in device pixels: CSS size × devicePixelRatio, rounded down to even, capped (capPane); dpi to match. */
 function measureLayout(): boolean {
   let changed = false;
   for (const p of panes) {
     const r = p.el.getBoundingClientRect();
-    const w = even(r.width * devicePixelRatio);
-    const h = even(r.height * devicePixelRatio);
-    const dpi = paneDpi(w, h, devicePixelRatio);
+    const fw = even(r.width * devicePixelRatio);
+    const fh = even(r.height * devicePixelRatio);
+    // Layout (dpi) for the full size, stream capped at the Tesla's whole screen.
+    const { w, h, dpi } = capPane(fw, fh, paneDpi(fw, fh, devicePixelRatio));
     if (w !== p.layout.w || h !== p.layout.h || dpi !== p.layout.dpi) { p.layout = { id: p.id, w, h, dpi }; changed = true; }
   }
   return changed;

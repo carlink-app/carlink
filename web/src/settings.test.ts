@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_HOST, DEFAULT_PORT } from './protocol';
-import { DEFAULT_DISPLAY, effective, endpoint, loadSaved, paneDpi, sameEndpoint, save, saveDisplay, uiScale, validPort, type Display, type Settings } from './settings';
+import { DEFAULT_DISPLAY, effective, endpoint, loadSaved, paneDpi, sameEndpoint, save, saveDisplay, uiScale, validPort, type Display, type Settings, capPane, MAX_PANE_PIXELS } from './settings';
 
 function memoryStorage(): Storage {
   const m = new Map<string, string>();
@@ -154,5 +154,20 @@ describe('uiScale', () => {
     expect(uiScale(0.5)).toBe(1);
     expect(uiScale(0)).toBe(1);
     expect(uiScale(NaN)).toBe(1);
+  });
+});
+
+describe('capPane', () => {
+  it('leaves the car sizes alone', () => {
+    expect(capPane(1034, 918, 230)).toEqual({ w: 1034, h: 918, dpi: 230 });
+    expect(capPane(1920, 1200, 260)).toEqual({ w: 1920, h: 1200, dpi: 260 });
+  });
+  it('shrinks a 2x full-screen desktop window to the Tesla screen size, same dp layout', () => {
+    const c = capPane(3724, 1922, 481);
+    expect(c.w * c.h).toBeLessThanOrEqual(MAX_PANE_PIXELS);
+    expect(c.w % 2 + c.h % 2).toBe(0);
+    expect(Math.abs(c.w / c.h - 3724 / 1922)).toBeLessThan(0.01);
+    // Same layout in dp (within rounding): width / dpi stays.
+    expect(Math.abs(c.w / c.dpi - 3724 / 481)).toBeLessThan(0.05);
   });
 });

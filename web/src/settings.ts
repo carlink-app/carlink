@@ -34,6 +34,21 @@ export function paneDpi(w: number, h: number, dpr: number): number {
 /** Page UI scale (--ui in style.css): keep the rail and menus about the size they have at 1x. */
 export const uiScale = (dpr: number): number => Math.min(1, Math.max(0.6, 1.15 / (dpr || 1)));
 
+/**
+ * Largest stream the phone is asked for: the Tesla's whole screen. Bigger
+ * windows (a 2x desktop, full screen) would make the phone render and encode
+ * several times that, and drop frames; the page scales the picture up instead.
+ */
+export const MAX_PANE_PIXELS = 1920 * 1200;
+
+/** [w]x[h] at [dpi], shrunk to MAX_PANE_PIXELS keeping the aspect and the dp layout. */
+export function capPane(w: number, h: number, dpi: number): { w: number; h: number; dpi: number } {
+  if (w * h <= MAX_PANE_PIXELS) return { w, h, dpi };
+  const s = Math.sqrt(MAX_PANE_PIXELS / (w * h));
+  const even = (n: number) => Math.max(2, Math.floor(n / 2) * 2);
+  return { w: even(w * s), h: even(h * s), dpi: Math.max(DPI_MIN, Math.round(dpi * s)) };
+}
+
 const KEY = 'carlink.settings';
 
 export function loadSaved(): Settings {
