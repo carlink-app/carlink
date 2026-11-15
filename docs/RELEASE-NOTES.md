@@ -1,47 +1,48 @@
-First test build. carlink streams apps from your Android phone to the Tesla
-browser over the phone's hotspot, with touch, notifications and an app
-launcher. Sound stays on the car's Bluetooth.
+carlink streams apps from your Android phone to the Tesla browser over the
+phone's hotspot, with touch, notifications and an app launcher. Sound stays on
+the car's Bluetooth.
 
-**Status: pre-release.** Tested on an Android 16 emulator and in desktop
-Chrome (including simulated 2.4/5 GHz Wi-Fi). Not yet tested in a car or on a
-real phone.
+**Status: pre-release.** Tested in a 2023 Model 3 with a Pixel 9 Pro XL
+(Android 17).
 
 ## Files
 
 | File | What it is |
 |---|---|
-| `carlink-<version>.apk` | The phone app (Android 11+; arm64 phones, x86_64 emulators) |
 | `carlink-car-page-<version>.zip` | The car page, only if you want to host it yourself |
-| `SHA256SUMS.txt` | Checksums of the files above |
+| `SHA256SUMS.txt` | Checksums |
 
-The car page is served at **https://carlink-app.github.io/carlink/**.
-Most people only need the APK.
+There is no APK: build the phone app from source and install it over USB
+(see the README, "Build from source"). The car page is served at
+**https://carlink-app.github.io/carlink/**.
 
 ## Setup
 
 1. **Shizuku** (gives carlink the rights it needs, no root):
    [Google Play](https://play.google.com/store/apps/details?id=moe.shizuku.privileged.api).
-   Start it via Wireless debugging (Shizuku shows how). This needs Wi-Fi.
-2. **Install the APK.** Allow installing from your browser or file manager
-   when asked. This build is debug-signed: to update to a later release,
-   uninstall the previous one first.
-3. **Open carlink**, tap Start engine, allow Shizuku, note the pairing code.
-   Optional: turn car notifications on (also gives the car real app icons);
-   choose your car for Bluetooth auto-start.
-4. **Hotspot:** set it to WPA2-Personal and turn off "Turn off hotspot
-   automatically". In carlink, tap **Car hotspot on**.
+   Start it via Wireless debugging or over USB (Shizuku shows how).
+2. **Build and install carlink** over USB with `adb install` (Play Protect
+   blocks installing it from a browser or file manager).
+3. **Open carlink**, tap Start engine, allow Shizuku and notifications, note
+   the pairing code. Optional: car notifications, Bluetooth auto-start.
+4. **Hotspot:** WPA2-Personal, "Turn off hotspot automatically" off. In
+   carlink, Car hotspot on.
 5. **In the car:** join the phone's hotspot, open
-   https://carlink-app.github.io/carlink/ in the browser, enter the pairing
-   code (address 9.9.0.1 and port 4433 are filled in), and Save & connect.
+   https://carlink-app.github.io/carlink/, enter the pairing code (address
+   9.9.0.1, port 4433 are filled in), Save & connect.
 
-Full first-test checklist, including what to capture if something fails:
+Checklist and troubleshooting:
 [docs/CAR-TEST.md](https://github.com/carlink-app/carlink/blob/main/docs/CAR-TEST.md).
 
 ## Known limits
 
-- Tapping a notification opens its app in the car, not the exact conversation (Android 16 restriction).
-- Settings, Shizuku, Play Store, installers and file managers are not offered
-  in the car, because the car screen works while the phone is locked.
+- Tapping a notification opens its app in the car, not always the exact screen (Android restriction).
+- Settings, Shizuku, Play Store, installers, file managers and camera apps are
+  not offered in the car (the car screen works while the phone is locked).
 - Apps with secure screens (banking) show black.
-- Bluetooth auto-start is untested on hardware.
-- Shizuku can only be started on Wi-Fi: if it stopped, restart it at home.
+- On phones where the car screen shares the phone's power state (Pixel,
+  Android 17), the phone stays awake, locked and dark while the car is
+  connected.
+- Shizuku must be restarted after a phone reboot (Wi-Fi or USB).
+
+License: PolyForm Noncommercial 1.0.0 (personal and other noncommercial use).

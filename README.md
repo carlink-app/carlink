@@ -5,13 +5,12 @@ messages, with touch, notifications and an app launcher, like Android Auto
 for a car that doesn't have it. Video goes to the car's browser over the
 phone's hotspot. Sound stays where it is: on the car's Bluetooth.
 
-**Status: pre-release.** Built and tested on an Android 16 emulator and in
-desktop Chrome, including simulated 2.4/5 GHz Wi-Fi and a 10-minute soak.
-The first real phone and car test is next. Target: Pixel 9 Pro and a 2023
-Model 3 (AMD Ryzen), but any Android 11+ phone and a Tesla with the Chromium
-browser should work.
+**Status: pre-release.** Tested in a 2023 Model 3 (AMD Ryzen) with a Pixel
+9 Pro XL (Android 17), plus an Android 16 emulator and desktop Chrome with
+simulated Wi-Fi. Any Android 11+ phone and a Tesla with the Chromium browser
+should work.
 
-- **Download:** [Releases](https://github.com/carlink-app/carlink/releases) (APK)
+- **Get the app:** build it from source (below); there are no APK downloads.
 - **Car page:** https://carlink-app.github.io/carlink/
 - **Setup and first-test checklist:** [docs/CAR-TEST.md](docs/CAR-TEST.md)
 
@@ -49,7 +48,9 @@ Protocol and certificate details: [docs/PROTOCOL.md](docs/PROTOCOL.md).
 ## Setup (short)
 
 1. Install **Shizuku** from Play and start it (Wireless debugging, on Wi-Fi).
-2. Install the carlink APK from [Releases](https://github.com/carlink-app/carlink/releases).
+2. Build carlink and install it over USB (see Build from source). Google Play
+   Protect blocks installing it from a file manager or browser (it uses
+   notification access), so install with `adb`.
 3. In carlink: **Start engine**, allow Shizuku, note the pairing code, tap **Car hotspot on**.
 4. In the car: join the phone's hotspot, open https://carlink-app.github.io/carlink/,
    enter the code, connect.
@@ -59,8 +60,9 @@ The full checklist with hotspot settings and troubleshooting is in
 
 ## Build from source
 
-Needs JDK 17, Android SDK with NDK 27.1, Rust with
-[cargo-ndk](https://github.com/bbqsrc/cargo-ndk), Node 22.
+Needs JDK 17 (Gradle doesn't run on newer JDKs yet: set `JAVA_HOME` to a
+JDK 17 if your system default is newer), Android SDK with NDK 27.1, Rust with
+[cargo-ndk](https://github.com/bbqsrc/cargo-ndk), Node 22, and `adb`.
 
 ```sh
 # Rust core -> native libraries for the app
@@ -71,6 +73,7 @@ cargo ndk -t arm64-v8a -t x86_64 --platform 30 -o ../android/app/src/main/jniLib
 # Android app
 cd ../android
 ./gradlew assembleDebug          # app/build/outputs/apk/debug/app-debug.apk
+adb install -r app/build/outputs/apk/debug/app-debug.apk   # phone with USB debugging
 
 # Car page
 cd ../web
@@ -88,10 +91,11 @@ testing.
 
 ## Releases
 
-Pushing a version tag (`git tag v0.1.0 && git push origin v0.1.0`) builds the
-APK and the car page from source on GitHub Actions and publishes a release
-with checksums. The car page itself deploys to GitHub Pages on every push to
-`main`.
+Every push runs the tests and lint (`.github/workflows/ci.yml`). The car page
+deploys to GitHub Pages on every push to `main` that changes it, after its own
+tests. A version tag (`git tag v0.2.0 && git push origin v0.2.0`) publishes a
+release with the car page as a zip (for self-hosting) and checksums. There is
+no APK in releases: build the app yourself.
 
 ## Privacy and safety
 
@@ -121,3 +125,10 @@ with checksums. The car page itself deploys to GitHub Pages on every push to
 - [docs/PROTOCOL.md](docs/PROTOCOL.md): wire protocol, certificate, limits
 - [docs/qa/](docs/qa/): what was tested per milestone and what was fixed
 - [spike/docs/RESULTS.md](spike/docs/RESULTS.md): early benchmarks and design findings
+
+## License
+
+[PolyForm Noncommercial 1.0.0](LICENSE.md): you may use, build and modify
+carlink for personal and other noncommercial purposes; commercial use is not
+allowed. Parts adapted from [scrcpy](https://github.com/Genymobile/scrcpy)
+stay under the Apache License 2.0; see [NOTICE](NOTICE).
