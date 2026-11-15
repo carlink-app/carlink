@@ -285,7 +285,7 @@ class Engine(private val code: String, port: Int, allow: String) : NativeCore.Li
                 }
             }
             "touch" -> panes[m.getInt("pane")]?.touch?.handle(
-                m.getString("a"), m.getInt("id"), m.getDouble("x").toFloat(), m.getDouble("y").toFloat(),
+                m.getString("a"), m.getInt("id"), m.getDouble("x").toFloat(), m.getDouble("y").toFloat(), m.optDouble("ts"),
             )
             "close", "close-all" -> {
                 val id = m.getInt("pane")

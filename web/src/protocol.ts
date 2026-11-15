@@ -86,7 +86,8 @@ export type PageMsg =
   /** Icons the page doesn't have (by package); answered in small batches. */
   | { t: 'app-icons'; pkgs: string[] }
   | { t: 'launch'; pane: number; pkg: string; cls: string }
-  | { t: 'touch'; pane: number; a: 'down' | 'move' | 'up' | 'cancel'; id: number; x: number; y: number }
+  /** `ts`: when it happened (page clock, ms); the phone keeps the spacing between events. */
+  | { t: 'touch'; pane: number; a: 'down' | 'move' | 'up' | 'cancel'; id: number; x: number; y: number; ts?: number }
   | { t: 'key'; pane: number; k: 'back' | 'home' }
   | { t: 'keyframe'; pane: number }
   | { t: 'notif-open'; id: string }

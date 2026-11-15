@@ -56,21 +56,22 @@ export const MOVE_INTERVAL_MS = 8;
  */
 export class MoveThrottle {
   private last = new Map<number, number>();
-  private pending = new Map<number, { x: number; y: number; timer: ReturnType<typeof setTimeout> }>();
+  private pending = new Map<number, { x: number; y: number; ts: number; timer: ReturnType<typeof setTimeout> }>();
 
   constructor(
-    private readonly send: (id: number, clientX: number, clientY: number) => void,
+    /** [ts]: when the newest position was seen (the event's timeStamp), not when it's sent. */
+    private readonly send: (id: number, clientX: number, clientY: number, ts: number) => void,
     private readonly now: () => number = () => performance.now(),
     private readonly interval = MOVE_INTERVAL_MS,
   ) {}
 
-  move(id: number, x: number, y: number): void {
+  move(id: number, x: number, y: number, ts = this.now()): void {
     const p = this.pending.get(id);
-    if (p) { p.x = x; p.y = y; return; } // a send is already scheduled: just update it
+    if (p) { p.x = x; p.y = y; p.ts = ts; return; } // a send is already scheduled: just update it
     const wait = this.interval - (this.now() - (this.last.get(id) ?? -Infinity));
-    if (wait <= 0) { this.emit(id, x, y); return; }
+    if (wait <= 0) { this.emit(id, x, y, ts); return; }
     const timer = setTimeout(() => this.flush(id), wait);
-    this.pending.set(id, { x, y, timer });
+    this.pending.set(id, { x, y, ts, timer });
   }
 
   /** Send any pending move for [id] now (call before its up/cancel). */
@@ -79,7 +80,7 @@ export class MoveThrottle {
     if (!p) return;
     clearTimeout(p.timer);
     this.pending.delete(id);
-    this.emit(id, p.x, p.y);
+    this.emit(id, p.x, p.y, p.ts);
   }
 
   /** Pointer finished: flush, then forget it. */
@@ -88,9 +89,9 @@ export class MoveThrottle {
     this.last.delete(id);
   }
 
-  private emit(id: number, x: number, y: number) {
+  private emit(id: number, x: number, y: number, ts: number) {
     this.last.set(id, this.now());
-    this.send(id, x, y);
+    this.send(id, x, y, ts);
   }
 }
 
@@ -100,14 +101,16 @@ export function attachTouch(t: TouchTarget): void {
   const ids = new PointerIds();
   let rect = el.getBoundingClientRect();
 
-  const emitAt = (a: 'down' | 'move' | 'up' | 'cancel', clientX: number, clientY: number, id: number) => {
+  // `ts`: when the touch happened (ms, page clock). The phone stamps its events
+  // with it, so network jitter doesn't turn a steady drag into an uneven one.
+  const emitAt = (a: 'down' | 'move' | 'up' | 'cancel', clientX: number, clientY: number, id: number, ts: number) => {
     const { w, h } = t.size();
     if (!w || !h) return;
     const { x, y } = toPane(clientX, clientY, rect, w, h);
-    t.send({ t: 'touch', pane: t.pane, a, id, x, y });
+    t.send({ t: 'touch', pane: t.pane, a, id, x, y, ts: Math.round(ts * 10) / 10 });
   };
-  const emit = (a: 'down' | 'up' | 'cancel', e: PointerEvent, id: number) => emitAt(a, e.clientX, e.clientY, id);
-  const moves = new MoveThrottle((id, x, y) => emitAt('move', x, y, id));
+  const emit = (a: 'down' | 'up' | 'cancel', e: PointerEvent, id: number) => emitAt(a, e.clientX, e.clientY, id, e.timeStamp);
+  const moves = new MoveThrottle((id, x, y, ts) => emitAt('move', x, y, id, ts));
 
   el.addEventListener('pointerdown', (e) => {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
@@ -123,7 +126,7 @@ export function attachTouch(t: TouchTarget): void {
   const onMove = (e: PointerEvent) => {
     const id = ids.get(e.pointerId);
     if (id === undefined) return;
-    moves.move(id, e.clientX, e.clientY);
+    moves.move(id, e.clientX, e.clientY, e.timeStamp);
   };
 
   if ('onpointerrawupdate' in window) {

@@ -79,6 +79,18 @@ dropped). Fix: the stream is capped at the Tesla's whole screen (1920x1200,
 `capPane`), same dp layout, scaled up on the page. After: 2112x1090, 49 fps,
 decode p95 9 ms, 1 dropped, 0 stalls.
 
+## Twitchy dragging in Waze/Maps (user test)
+
+Video and list scrolling were smooth, map dragging in Waze and Google Maps
+twitchy. Cause: the engine stamped injected touch events with their arrival
+time; Wi-Fi jitter (RTT p95 ~50 ms at home) delivered a steady drag in bursts,
+and map apps move with each event's time and position. Fix: the page sends
+each touch's own time (`ts`, PointerEvent.timeStamp); the engine anchors it at
+the gesture start and stamps events with it (never ahead of now, never
+backwards, re-anchored after a 150 ms hiccup; `TouchClock`, 4 tests). User:
+"much better, Waze ~90% smooth", Maps with occasional spikes (likely its own
+tile drawing).
+
 ## Next
 
 - Car test: read `gap max` / `stalls` in the overlay during the first minute.

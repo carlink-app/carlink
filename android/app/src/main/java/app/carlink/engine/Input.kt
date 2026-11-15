@@ -98,12 +98,48 @@ class TouchState {
     private fun gesture(action: Int) = Gesture(action, downTime, active.toList())
 }
 
+/**
+ * Event times for injected touches from the car's own timestamps. Network
+ * jitter makes moves arrive in bursts; stamped with their arrival time,
+ * Android sees an uneven finger speed (twitchy panning, wrong fling speed,
+ * and its touch resampling works from these times). The page's clock is
+ * anchored at each gesture's first touch and followed from there, never
+ * ahead of now and never backwards. Pure (unit-tested on the JVM).
+ */
+class TouchClock {
+    private var offset = 0.0
+    private var last = 0L
+
+    /** [carMs]: the page's timestamp of the event (NaN if not sent); [now]: phone uptime ms. */
+    fun eventTime(carMs: Double, now: Long, gestureStart: Boolean): Long {
+        if (carMs.isNaN()) return now.also { last = it }
+        if (gestureStart) offset = now - carMs
+        var t = (carMs + offset).toLong()
+        // Arriving much later than the anchor (a hiccup): follow the phone's
+        // clock again rather than lag behind for the rest of the gesture.
+        if (now - t > MAX_LAG_MS) { offset = now - carMs; t = now }
+        t = t.coerceIn(last, now)
+        last = t
+        return t
+    }
+
+    companion object {
+        const val MAX_LAG_MS = 150L
+    }
+}
+
 /** Injects one pane's touches on its display. */
 class Touch(private val displayId: Int) {
     private val state = TouchState()
+    private val clock = TouchClock()
+    private var down = false
 
-    fun handle(action: String, id: Int, x: Float, y: Float) {
-        val g = state.handle(action, id, x, y, SystemClock.uptimeMillis()) ?: return
+    /** [carMs]: when the car saw it (page clock, ms); NaN from older pages. */
+    fun handle(action: String, id: Int, x: Float, y: Float, carMs: Double = Double.NaN) {
+        val now = SystemClock.uptimeMillis()
+        val time = clock.eventTime(carMs, now, gestureStart = action == "down" && !down)
+        val g = state.handle(action, id, x, y, time) ?: return
+        down = g.action != TouchState.UP && g.action != TouchState.CANCEL
         val props = Array(g.pointers.size) { i ->
             MotionEvent.PointerProperties().apply {
                 this.id = g.pointers[i].id
@@ -118,7 +154,7 @@ class Touch(private val displayId: Int) {
                 size = 1f
             }
         }
-        val e = MotionEvent.obtain(g.downTime, SystemClock.uptimeMillis(), g.action, props.size, props, coords, 0, 0, 1f, 1f, 0, 0, InputDevice.SOURCE_TOUCHSCREEN, 0)
+        val e = MotionEvent.obtain(g.downTime, time, g.action, props.size, props, coords, 0, 0, 1f, 1f, 0, 0, InputDevice.SOURCE_TOUCHSCREEN, 0)
         Input.inject(e, displayId)
         e.recycle()
     }

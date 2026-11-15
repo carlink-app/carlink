@@ -84,7 +84,7 @@ Page -> phone:
 {"t":"apps"}
 {"t":"app-icons","pkgs":["com.waze","com.spotify.music"]}
 {"t":"launch","pane":0,"pkg":"com.google.android.apps.maps","cls":"com.google.android.maps.MapsActivity"}
-{"t":"touch","pane":0,"a":"down","id":0,"x":512.0,"y":300.5}
+{"t":"touch","pane":0,"a":"down","id":0,"x":512.0,"y":300.5,"ts":81234.5}
 {"t":"key","pane":0,"k":"back"}
 {"t":"keyframe","pane":0}
 {"t":"notif-open","id":"n3f9a1c"}
@@ -92,6 +92,10 @@ Page -> phone:
 {"t":"close-all","pane":0}
 ```
 
+- `touch.ts`: when the touch happened (page clock, ms, optional). The phone
+  anchors it at each gesture's first touch and stamps the injected events
+  with it, so network jitter doesn't make a steady drag uneven (never ahead
+  of the phone's clock; re-anchored after a 150 ms hiccup).
 - `touch.a`: `down` | `move` | `up` | `cancel`. `id` = pointer id
   (`PointerEvent.pointerId` mapped to small ints 0..9). x/y in pane pixels
   (pane canvas coordinates, i.e. video pixels).
