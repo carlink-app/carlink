@@ -124,7 +124,7 @@ Phone -> page:
 {"t":"notif-gone","id":"n3f9a1c"}
 ```
 
-- `apps.cat`: launcher group, `nav` | `music` | `social` | `work` | `other`
+- `apps.cat`: launcher group, `nav` | `energy` | `music` | `social` | `work` | `other`
   (known apps first, then the app's declared category). Missing or unknown
   = `other`. The page shows the groups in that order.
 - `notif`: a phone notification worth showing in the car (new or updated;

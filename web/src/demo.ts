@@ -72,7 +72,7 @@ export async function startDemo(onFrame: (buf: ArrayBuffer) => void, onError: (m
 const DEMO_APPS: [string, string, AppCategory][] = [
   ['Maps', '#1a73e8', 'nav'], ['Spotify', '#1db954', 'music'], ['YouTube Music', '#ff0000', 'music'], ['Waze', '#33ccff', 'nav'],
   ['Messages', '#4285f4', 'social'], ['Phone', '#34a853', 'social'], ['Podcasts', '#8e24aa', 'music'], ['Audible', '#f29a33', 'music'],
-  ['Calendar', '#1967d2', 'work'], ['Weather', '#fbbc04', 'other'], ['WhatsApp', '#25d366', 'social'], ['Pocket Casts', '#f43e37', 'music'],
+  ['Calendar', '#1967d2', 'work'], ['PlugShare', '#fbbc04', 'energy'], ['WhatsApp', '#25d366', 'social'], ['Pocket Casts', '#f43e37', 'music'],
   ['Settings', '#5f6368', 'other'], ['Chrome', '#0f9d58', 'other'], ['Photos', '#ea4335', 'other'], ['Clock', '#3c4043', 'other'],
 ];
 

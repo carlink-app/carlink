@@ -27,12 +27,14 @@ class Engine(private val code: String, port: Int, allow: String) : NativeCore.Li
         private val DPI = 72..640
         private const val APPS_TTL_MS = 30_000L
         private const val PANE_GRACE_MS = 30_000L
+        private const val GUARD_MS = 1_000L
         private const val REPLAY_MS = 5 * 60_000L
     }
 
     private val thread = HandlerThread("engine").apply { start() }
     private val handler = Handler(thread.looper)
     private val panes = HashMap<Int, Pane>()
+    private val phonePower by lazy { PhonePower(handler) }
     private val lastLaunch = HashMap<Int, Pair<String, String>>()
     /** Chosen per session from what the car decodes (HEVC preferred). */
     private var codec = "h264"
@@ -55,6 +57,26 @@ class Engine(private val code: String, port: Int, allow: String) : NativeCore.Li
 
     init {
         core.set(NativeCore.nativeStart(port, code, allow, this))
+        post { phonePower.restoreAfterCrash() }
+    }
+
+    /** While panes exist: close denied apps that reached the car display anyway. */
+    private val guard = object : Runnable {
+        override fun run() {
+            if (panes.isEmpty() || core.get() == 0L) return
+            try {
+                for (pane in panes.values) {
+                    val closed = Apps.closeDenied(pane.displayId)
+                    if (closed.isNotEmpty()) {
+                        Log.w(TAG, "closed on the car display (not allowed there): $closed")
+                        error("That screen isn't available in the car")
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "guard: $e") // never take the engine down
+            }
+            handler.postDelayed(this, GUARD_MS)
+        }
     }
 
     /**
@@ -239,18 +261,20 @@ class Engine(private val code: String, port: Int, allow: String) : NativeCore.Li
     private fun layout(m: JSONObject) {
         val list = m.getJSONArray("panes")
         if (list.length() > MAX_PANES) return error("too many panes")
-        val wanted = HashSet<Int>()
-        for (i in 0 until list.length()) {
+        // Validate everything before touching any pane: a bad entry must not
+        // leave the layout half applied.
+        val wanted = (0 until list.length()).map { i ->
             val p = list.getJSONObject(i)
             val id = p.getInt("id")
             val w = p.getInt("w") and 1.inv()
             val h = p.getInt("h") and 1.inv()
             val dpi = p.optInt("dpi", 200)
             if (id !in 0 until MAX_PANES || w !in SIZE || h !in SIZE || dpi !in DPI) return error("bad layout")
-            wanted += id
-            layoutPane(id, w, h, dpi)
+            intArrayOf(id, w, h, dpi)
         }
-        (panes.keys - wanted).forEach { panes.remove(it)?.release() }
+        wanted.forEach { (id, w, h, dpi) -> layoutPane(id, w, h, dpi) }
+        (panes.keys - wanted.map { it[0] }.toSet()).forEach { panes.remove(it)?.release() }
+        if (panes.values.none { it.sharesPhonePower }) phonePower.stop()
     }
 
     private fun layoutPane(id: Int, w: Int, h: Int, dpi: Int) {
@@ -276,6 +300,9 @@ class Engine(private val code: String, port: Int, allow: String) : NativeCore.Li
                 return layoutPane(id, w, h, dpi)
             }
             panes[id] = pane
+            if (pane.sharesPhonePower) phonePower.start()
+            handler.removeCallbacks(guard)
+            handler.postDelayed(guard, GUARD_MS)
             lastLaunch[id]?.let { (pkg, cls) -> Apps.launch(pkg, cls, pane.displayId) }
         }
         val pane = panes[id] ?: return
@@ -285,6 +312,7 @@ class Engine(private val code: String, port: Int, allow: String) : NativeCore.Li
     private fun releasePanes() {
         panes.values.forEach { it.release() }
         panes.clear()
+        phonePower.stop()
         // A new session starts empty; the page re-sends what it was showing.
         lastLaunch.clear()
     }

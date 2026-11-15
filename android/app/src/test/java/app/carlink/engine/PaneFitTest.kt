@@ -53,9 +53,9 @@ class PaneFitTest {
     }
 
     @Test fun maxBitrateHevcIsLowerThanH264() {
-        assertEquals(15_000_000, Pane.maxBitrate("h264"))
-        assertEquals(9_000_000, Pane.maxBitrate("hevc"))
-        assertEquals(15_000_000, Pane.maxBitrate("anything-else"))
+        assertEquals(20_000_000, Pane.maxBitrate("h264"))
+        assertEquals(16_000_000, Pane.maxBitrate("hevc"))
+        assertEquals(20_000_000, Pane.maxBitrate("anything-else"))
     }
 
     @Test fun scaledDpiKeepsDpSize() {

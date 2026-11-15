@@ -46,18 +46,68 @@ export function toPane(clientX: number, clientY: number, rect: DOMRect | { left:
   return { x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10 };
 }
 
+/** Minimum gap between moves of one pointer (~125 Hz): a 1000 Hz mouse or
+ * pointerrawupdate would otherwise flood the phone (it caps control messages). */
+export const MOVE_INTERVAL_MS = 8;
+
+/**
+ * Per-pointer move throttle: at most one move per [interval] ms, always the
+ * newest position, and nothing pending is lost (flush before up/cancel).
+ */
+export class MoveThrottle {
+  private last = new Map<number, number>();
+  private pending = new Map<number, { x: number; y: number; timer: ReturnType<typeof setTimeout> }>();
+
+  constructor(
+    private readonly send: (id: number, clientX: number, clientY: number) => void,
+    private readonly now: () => number = () => performance.now(),
+    private readonly interval = MOVE_INTERVAL_MS,
+  ) {}
+
+  move(id: number, x: number, y: number): void {
+    const p = this.pending.get(id);
+    if (p) { p.x = x; p.y = y; return; } // a send is already scheduled: just update it
+    const wait = this.interval - (this.now() - (this.last.get(id) ?? -Infinity));
+    if (wait <= 0) { this.emit(id, x, y); return; }
+    const timer = setTimeout(() => this.flush(id), wait);
+    this.pending.set(id, { x, y, timer });
+  }
+
+  /** Send any pending move for [id] now (call before its up/cancel). */
+  flush(id: number): void {
+    const p = this.pending.get(id);
+    if (!p) return;
+    clearTimeout(p.timer);
+    this.pending.delete(id);
+    this.emit(id, p.x, p.y);
+  }
+
+  /** Pointer finished: flush, then forget it. */
+  end(id: number): void {
+    this.flush(id);
+    this.last.delete(id);
+  }
+
+  private emit(id: number, x: number, y: number) {
+    this.last.set(id, this.now());
+    this.send(id, x, y);
+  }
+}
+
 export function attachTouch(t: TouchTarget): void {
   const el = t.el;
   el.style.touchAction = 'none';
   const ids = new PointerIds();
   let rect = el.getBoundingClientRect();
 
-  const emit = (a: 'down' | 'move' | 'up' | 'cancel', e: PointerEvent, id: number) => {
+  const emitAt = (a: 'down' | 'move' | 'up' | 'cancel', clientX: number, clientY: number, id: number) => {
     const { w, h } = t.size();
     if (!w || !h) return;
-    const { x, y } = toPane(e.clientX, e.clientY, rect, w, h);
+    const { x, y } = toPane(clientX, clientY, rect, w, h);
     t.send({ t: 'touch', pane: t.pane, a, id, x, y });
   };
+  const emit = (a: 'down' | 'up' | 'cancel', e: PointerEvent, id: number) => emitAt(a, e.clientX, e.clientY, id);
+  const moves = new MoveThrottle((id, x, y) => emitAt('move', x, y, id));
 
   el.addEventListener('pointerdown', (e) => {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
@@ -73,7 +123,7 @@ export function attachTouch(t: TouchTarget): void {
   const onMove = (e: PointerEvent) => {
     const id = ids.get(e.pointerId);
     if (id === undefined) return;
-    emit('move', e, id);
+    moves.move(id, e.clientX, e.clientY);
   };
 
   if ('onpointerrawupdate' in window) {
@@ -89,7 +139,9 @@ export function attachTouch(t: TouchTarget): void {
 
   const end = (a: 'up' | 'cancel') => (e: PointerEvent) => {
     const id = ids.release(e.pointerId);
-    if (id !== undefined) emit(a, e, id);
+    if (id === undefined) return;
+    moves.end(id);
+    emit(a, e, id);
   };
   el.addEventListener('pointerup', end('up'));
   el.addEventListener('pointercancel', end('cancel'));

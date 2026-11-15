@@ -64,7 +64,7 @@ object Prefs {
     internal fun parseDevAllow(text: String): String =
         text.split(Regex("[,\\s]+")).filter { it == "any" || DEV_ALLOW_ENTRY.matches(it) }.distinct().joinToString(",")
 
-    private val DEV_ALLOW_ENTRY = Regex("""^((25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(25[0-5]|2[0-4]\d|1?\d?\d)(/([0-9]|[12]\d|3[0-2]))?$""")
+    private val DEV_ALLOW_ENTRY = Regex("""^((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(/([0-9]|[12]\d|3[0-2]))?$""")
 
     fun libPath(ctx: Context): String = File(ctx.applicationInfo.nativeLibraryDir, "libcarlink_core.so").path
 }

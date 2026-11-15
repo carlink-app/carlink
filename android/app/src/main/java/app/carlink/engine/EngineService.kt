@@ -22,8 +22,10 @@ class EngineService : IEngine.Stub() {
             val dir = Shell.context.packageManager.getApplicationInfo(APP_PACKAGE, 0).nativeLibraryDir
             System.load("$dir/libcarlink_core.so")
             Shell.init()
-            engine = Engine(code, port, allowList(devAllow)).also { it.toApp = toApp() }
-            if (devAllow.isNotEmpty()) Log.w(TAG, "DEV: also accepting the car page from $devAllow")
+            // Defense in depth: release builds never widen who may connect.
+            val dev = if (app.carlink.BuildConfig.DEBUG) devAllow else ""
+            engine = Engine(code, port, allowList(dev)).also { it.toApp = toApp() }
+            if (dev.isNotEmpty()) Log.w(TAG, "DEV: also accepting the car page from $dev")
             "running on :$port"
         } catch (t: Throwable) {
             Log.e(TAG, "engine start failed", t)

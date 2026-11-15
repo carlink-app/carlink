@@ -33,7 +33,25 @@ const QUEUE_FRAMES: usize = 6;
 const INFLIGHT_STREAMS: usize = 6;
 const CONTROL_QUEUE: usize = 64;
 const MAX_LINE: usize = 16 * 1024;
+/// Control messages per second before touch moves are dropped (a 1000 Hz
+/// mouse or a fast touchscreen can exceed it; the page throttles moves too).
 const MAX_CONTROL_PER_SEC: u32 = 500;
+/// Beyond this the session is closed: not a gesture, a flood.
+const FLOOD_PER_SEC: u32 = 4 * MAX_CONTROL_PER_SEC;
+/// Messages that make the phone start a process or do real work (`am`
+/// launches, task removal, the app list): far more than a driver can tap.
+const MAX_HEAVY_PER_SEC: u32 = 20;
+const HEAVY_TYPES: &[&str] = &["launch", "close", "close-all", "apps", "key", "notif-open"];
+
+/// How a control message counts against the per-second budgets.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Kind {
+    /// A touch move: the next one supersedes it, so it may be dropped.
+    Move,
+    /// Costly on the phone (see HEAVY_TYPES): limited to MAX_HEAVY_PER_SEC.
+    Heavy,
+    Other,
+}
 const AUTH_TIMEOUT: Duration = Duration::from_secs(5);
 /// QUIC + TLS + WebTransport CONNECT must finish within this.
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(5);
@@ -253,11 +271,33 @@ async fn write_line(send: &mut SendStream, line: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Validate a control line from the page and return it re-serialized.
-fn validate_control(line: &str) -> Option<String> {
+/// Validate a control line from the page: the message re-serialized if its
+/// type is allowed, and how it counts against the budgets.
+fn validate_control(line: &str) -> Option<(String, Kind)> {
     let v: serde_json::Value = serde_json::from_str(line).ok()?;
     let t = v.get("t")?.as_str()?;
-    CONTROL_TYPES.contains(&t).then(|| v.to_string())
+    if !CONTROL_TYPES.contains(&t) {
+        return None;
+    }
+    let kind = if t == "touch" && v.get("a").and_then(|a| a.as_str()) == Some("move") {
+        Kind::Move
+    } else if HEAVY_TYPES.contains(&t) {
+        Kind::Heavy
+    } else {
+        Kind::Other
+    };
+    Some((v.to_string(), kind))
+}
+
+/// Whether a message is dropped: touch moves past MAX_CONTROL_PER_SEC
+/// messages this second, heavy ones past MAX_HEAVY_PER_SEC heavy ones.
+/// Touch downs/ups and the rest are never dropped (FLOOD_PER_SEC closes).
+fn over_budget(count: u32, heavy_count: u32, kind: Kind) -> bool {
+    match kind {
+        Kind::Move => count > MAX_CONTROL_PER_SEC,
+        Kind::Heavy => heavy_count > MAX_HEAVY_PER_SEC,
+        Kind::Other => false,
+    }
 }
 
 /// How long to refuse an address after `n` failed authentications.
@@ -540,6 +580,7 @@ async fn handle_session(
     let result: anyhow::Result<()> = async {
         let mut window = Instant::now();
         let mut count = 0u32;
+        let mut heavy_count = 0u32;
         while let Some(line) = lines.next().await? {
             if line.is_empty() {
                 continue;
@@ -547,10 +588,17 @@ async fn handle_session(
             if window.elapsed() >= Duration::from_secs(1) {
                 window = Instant::now();
                 count = 0;
+                heavy_count = 0;
             }
             count += 1;
-            anyhow::ensure!(count <= MAX_CONTROL_PER_SEC, "control flood");
-            let Some(msg) = validate_control(&line) else { anyhow::bail!("invalid control message") };
+            anyhow::ensure!(count <= FLOOD_PER_SEC, "control flood");
+            let Some((msg, kind)) = validate_control(&line) else { anyhow::bail!("invalid control message") };
+            if kind == Kind::Heavy {
+                heavy_count += 1;
+            }
+            if over_budget(count, heavy_count, kind) {
+                continue; // skip intermediate touch moves / excess launches; keep downs/ups
+            }
             if !is_current() {
                 break;
             }
@@ -644,7 +692,7 @@ mod tests {
 
     #[test]
     fn control_validation() {
-        assert_eq!(validate_control(r#"{"t":"keyframe","pane":0}"#).as_deref(), Some(r#"{"pane":0,"t":"keyframe"}"#));
+        assert_eq!(validate_control(r#"{"t":"keyframe","pane":0}"#), Some((r#"{"pane":0,"t":"keyframe"}"#.to_string(), Kind::Other)));
         assert!(validate_control(r#"{"t":"rm -rf"}"#).is_none());
         assert!(validate_control("not json").is_none());
         assert!(validate_control(r#"["t"]"#).is_none());
@@ -655,10 +703,10 @@ mod tests {
     #[test]
     fn control_validation_types() {
         // Every page->phone type in PROTOCOL.md passes, including milestone 3's notif-open.
-        for t in ["hello", "layout", "apps", "launch", "touch", "key", "keyframe", "notif-open"] {
+        for t in ["hello", "layout", "apps", "launch", "touch", "key", "keyframe", "notif-open", "close", "close-all"] {
             assert!(validate_control(&format!(r#"{{"t":"{t}"}}"#)).is_some(), "{t}");
         }
-        let open = validate_control(r#"{"t":"notif-open","id":"n3f9a1c"}"#).unwrap();
+        let (open, _) = validate_control(r#"{"t":"notif-open","id":"n3f9a1c"}"#).unwrap();
         assert_eq!(open, r#"{"id":"n3f9a1c","t":"notif-open"}"#);
         // Phone->page types (and near misses) can't be injected by the page.
         for t in ["notif", "notif-gone", "open", "opened", "icons", "error", "Notif-open", "notif-open ", ""] {
@@ -666,6 +714,58 @@ mod tests {
         }
         assert!(validate_control(r#"{"t":1}"#).is_none());
         assert!(validate_control(r#"{"id":"n1"}"#).is_none());
+    }
+
+    #[test]
+    fn only_touch_moves_are_droppable() {
+        let kind = |l: &str| validate_control(l).unwrap().1;
+        assert_eq!(kind(r#"{"t":"touch","pane":0,"a":"move","id":0,"x":1,"y":2}"#), Kind::Move);
+        assert_eq!(kind(r#"{"t":"touch","pane":0,"a":"down","id":0,"x":1,"y":2}"#), Kind::Other);
+        assert_eq!(kind(r#"{"t":"touch","pane":0,"a":"up","id":0,"x":1,"y":2}"#), Kind::Other);
+        assert_eq!(kind(r#"{"t":"launch","pane":0,"pkg":"a","cls":"b"}"#), Kind::Heavy);
+        assert_eq!(kind(r#"{"t":"close-all","pane":0}"#), Kind::Heavy);
+        assert_eq!(kind(r#"{"t":"keyframe","pane":0}"#), Kind::Other);
+    }
+
+    #[test]
+    fn moves_dropped_only_over_budget() {
+        assert!(!over_budget(1, 0, Kind::Move));
+        assert!(!over_budget(MAX_CONTROL_PER_SEC, 0, Kind::Move));
+        assert!(over_budget(MAX_CONTROL_PER_SEC + 1, 0, Kind::Move));
+        assert!(over_budget(FLOOD_PER_SEC, 0, Kind::Move));
+        // Downs, ups etc. are never dropped, however busy.
+        assert!(!over_budget(MAX_CONTROL_PER_SEC + 1, 0, Kind::Other));
+        assert!(!over_budget(FLOOD_PER_SEC, 0, Kind::Other));
+        // Launches/closes: their own small budget, independent of touch traffic.
+        assert!(!over_budget(FLOOD_PER_SEC, MAX_HEAVY_PER_SEC, Kind::Heavy));
+        assert!(over_budget(2, MAX_HEAVY_PER_SEC + 1, Kind::Heavy));
+        // Dropping must kick in well before the session is closed as a flood.
+        const { assert!(FLOOD_PER_SEC > MAX_CONTROL_PER_SEC) };
+    }
+
+    #[test]
+    fn allow_list_edges() {
+        // Whitespace-only = allow all; /0 = everyone; host bits are masked off.
+        assert!(parse_allow("  ").unwrap().is_none());
+        let all = parse_allow("0.0.0.0/0").unwrap();
+        assert!(allowed(&all, "203.0.113.7".parse().unwrap()));
+        assert!(!allowed(&all, "::1".parse().unwrap()), "IPv6 never matches, even /0");
+        let a = parse_allow("10.0.2.15/24").unwrap();
+        assert_eq!(a, Some(vec![(u32::from(Ipv4Addr::new(10, 0, 2, 0)), 0xFFFF_FF00)]));
+        assert!(allowed(&a, "10.0.2.200".parse().unwrap()));
+        // A bare address is /32: only itself.
+        let one = parse_allow("192.0.2.10").unwrap();
+        assert!(!allowed(&one, "192.0.2.11".parse().unwrap()));
+        assert!(allowed(&parse_allow("9.9.0.0/24,192.0.2.10").unwrap(), "::ffff:192.0.2.10".parse().unwrap()));
+        for bad in ["9.9.0.0/", "9.9.0.0/-1", "9.9.0", "a.b.c.d", ",", "9.9.0.0/24,,1.2.3.4"] {
+            assert!(parse_allow(bad).is_err(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn allow_rejects_leading_zero_octets() {
+        // Rust refuses octets like "01"; the app must not pass them through.
+        assert!(parse_allow("01.2.3.4").is_err());
     }
 
     #[test]

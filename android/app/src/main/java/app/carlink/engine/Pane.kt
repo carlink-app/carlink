@@ -44,6 +44,11 @@ class Pane(
 
     val displayId: Int
     val touch: Touch
+    /**
+     * The display didn't get its own display group (seen on a Pixel with
+     * Android 17), so it sleeps when the phone sleeps: see PhonePower.
+     */
+    val sharesPhonePower: Boolean
 
     init {
         try {
@@ -61,7 +66,11 @@ class Pane(
             val d = createDisplay(scaledDpi(dpi, requestedWidth, width), s).also { display = it }
             displayId = d.display.displayId
             keyboardOnCar(displayId)
-            awake = keepAwake(displayId)
+            sharesPhonePower = displayGroupId(d.display) == 0
+            Log.i(TAG, "pane $id: display $displayId, ${if (sharesPhonePower) "shares the phone's power group" else "own power group"}")
+            // Own group: a wake lock on it keeps the car display on while idle.
+            // Shared group: PhonePower takes care of it.
+            if (!sharesPhonePower) awake = keepAwake(displayId)
             touch = Touch(displayId)
             thread = Thread(::drain, "pane-$id-out").apply { start() }
         } catch (t: Throwable) {
@@ -129,7 +138,12 @@ class Pane(
             DisplayManager.VIRTUAL_DISPLAY_FLAG_PRESENTATION or
             DisplayManager.VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY or
             (1 shl 6) or // SUPPORTS_TOUCH
-            (1 shl 7) // ROTATES_WITH_CONTENT
+            (1 shl 7) or // ROTATES_WITH_CONTENT
+            // DESTROY_CONTENT_ON_REMOVAL: when the car display goes, its apps
+            // close instead of moving to the phone screen. Moving apps between
+            // displays can make Android 17 restart the app itself onto ours,
+            // which it isn't allowed to do, and system_server crashes.
+            (1 shl 8)
         if (Build.VERSION.SDK_INT >= 33) {
             flags = flags or (1 shl 10) or // TRUSTED
                 (1 shl 11) or // OWN_DISPLAY_GROUP
@@ -137,8 +151,10 @@ class Pane(
                 (1 shl 13) // TOUCH_FEEDBACK_DISABLED
         }
         if (Build.VERSION.SDK_INT >= 34) {
-            flags = flags or (1 shl 14) or // OWN_FOCUS
-                (1 shl 15) // DEVICE_DISPLAY_GROUP
+            // Not DEVICE_DISPLAY_GROUP: it only applies to virtual devices, and the
+            // car display must stay in its OWN group so it keeps power (and touch)
+            // while the phone sleeps.
+            flags = flags or (1 shl 14) // OWN_FOCUS
         }
         val ctor = DisplayManager::class.java.getDeclaredConstructor(android.content.Context::class.java)
         ctor.isAccessible = true
@@ -231,19 +247,28 @@ class Pane(
         null
     }
 
+    /** Hidden DisplayInfo.displayGroupId; -1 if unreadable (treated as its own group). */
+    @android.annotation.SuppressLint("PrivateApi", "DiscouragedPrivateApi")
+    private fun displayGroupId(display: android.view.Display): Int = try {
+        val info = Class.forName("android.view.DisplayInfo").getDeclaredConstructor().newInstance()
+        android.view.Display::class.java.getMethod("getDisplayInfo", info.javaClass).invoke(display, info)
+        info.javaClass.getField("displayGroupId").getInt(info)
+    } catch (e: Exception) {
+        Log.w(TAG, "display group unknown: $e")
+        -1
+    }
+
     /**
      * Show the on-screen keyboard on the car display, not the phone (as
      * scrcpy's --display-ime-policy=local). Hidden API, Android 11+.
      */
-    @android.annotation.SuppressLint("PrivateApi")
     private fun keyboardOnCar(displayId: Int) {
         try {
-            val wmg = Class.forName("android.view.WindowManagerGlobal")
-            val wm = wmg.getMethod("getWindowManagerService").invoke(null)
+            val wm = Shell.service("window", "android.view.IWindowManager")!!
             wm.javaClass.getMethod("setDisplayImePolicy", Int::class.javaPrimitiveType, Int::class.javaPrimitiveType)
                 .invoke(wm, displayId, 0 /* WindowManager.DISPLAY_IME_POLICY_LOCAL */)
         } catch (e: Exception) {
-            Log.w(TAG, "keyboard stays on the phone: $e")
+            Log.w(TAG, "keyboard stays on the phone: ${Shell.cause(e)}")
         }
     }
 
@@ -253,10 +278,12 @@ class Pane(
             if (actual >= requested) dpi else (dpi.toLong() * actual / requested).toInt().coerceAtLeast(72)
 
         /**
-         * Bitrate at level 1000. H.264 "fast" profile for a clean 5 GHz link;
-         * HEVC needs ~40% fewer bits for the same picture.
+         * Bitrate at level 1000. In the car (short hotspot link, RTT ~5 ms)
+         * the old caps (HEVC 9, H.264 15 Mbit/s) were reached within seconds
+         * and held all session, so the cap, not the link, set the picture
+         * quality. Rate control still backs off when the link gets busy.
          */
-        fun maxBitrate(codec: String) = if (codec == "hevc") 9_000_000 else 15_000_000
+        fun maxBitrate(codec: String) = if (codec == "hevc") 16_000_000 else 20_000_000
 
         /**
          * Largest size with the requested aspect ratio that the encoder

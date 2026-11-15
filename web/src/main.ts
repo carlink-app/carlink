@@ -18,6 +18,8 @@ const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getEleme
 const params = new URLSearchParams(location.search);
 const DEMO = params.get('demo') === '1';
 const MAX_RECENTS = 5;
+/** Time for a closed app's rail icon to shrink away (.recent.leaving) before it's dropped. */
+const LEAVE_MS = 180;
 let debugOn = params.get('debug') === '1';
 /** Build id (`vite.config.ts`): "YYMMDD-HHMM-<content hash>", or "dev". */
 const BUILD = /^\d{6}-\d{4}-[0-9a-f]{8}$/.test(__BUILD__) ? __BUILD__ : 'dev';
@@ -438,12 +440,12 @@ function closeApp(pkg: string) {
   }
   send({ t: 'close', pane: 0, pkg });
   disarm();
-  // Let the icon shrink away, then drop it.
   $('recents').querySelectorAll<HTMLElement>('.recent').forEach((el) => {
     el.classList.toggle('current', el.dataset.pkg === current);
     if (el.dataset.pkg === pkg) el.classList.add('leaving');
   });
-  setTimeout(() => setRecents(recents.filter((a) => a.pkg !== pkg)), 180);
+  // Re-launched within the animation? Then it stays on the rail.
+  setTimeout(() => setRecents(recents.filter((a) => a.pkg !== pkg || a.pkg === current)), LEAVE_MS);
 }
 
 function closeAll() {
@@ -451,7 +453,7 @@ function closeAll() {
   current = null;
   $('recents').querySelectorAll('.recent').forEach((el) => el.classList.add('leaving'));
   showLauncher(true);
-  setTimeout(() => setRecents([]), 180);
+  setTimeout(() => setRecents([]), LEAVE_MS);
 }
 
 // Destructive rail actions take two taps: the first arms (shows ×), the second acts.
@@ -492,10 +494,12 @@ function renderRecents() {
     return b;
   }));
   $('btn-closeall').hidden = recents.length === 0;
+  renderArmed(); // a re-render (new app list) keeps a pending close visible
 }
 
 let launcherOn = false;
 function showLauncher(on: boolean) {
+  if (on !== launcherOn) disarm(); // a close armed for the app in front no longer applies
   launcherOn = on;
   $('launcher').hidden = !on;
   $('btn-home').classList.toggle('active', on);
@@ -626,6 +630,16 @@ form.addEventListener('submit', (e) => {
 function renderDisplay() {
   $('f-showtext').setAttribute('aria-checked', String(settings.showText));
 }
+// Full screen, where the browser allows it (the Tesla browser's support is
+// untested). The pane re-measures on resize and the phone follows.
+$('fullscreen-row').hidden = !document.fullscreenEnabled;
+const syncFullscreen = () => { $('f-fullscreen').textContent = document.fullscreenElement ? 'Exit full screen' : 'Full screen'; };
+document.addEventListener('fullscreenchange', syncFullscreen);
+$('f-fullscreen').addEventListener('click', () => {
+  const p = document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen({ navigationUI: 'hide' });
+  p.catch((e: unknown) => toast(`Full screen not available: ${e instanceof Error ? e.message : String(e)}`));
+});
+
 $('f-showtext').addEventListener('click', () => {
   settings = { ...settings, showText: !settings.showText };
   saveDisplay(settings);

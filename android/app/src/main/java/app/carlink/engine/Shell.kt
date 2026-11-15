@@ -9,6 +9,7 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.content.pm.ApplicationInfo
 import android.os.Build
+import android.os.IBinder
 import android.os.Looper
 import android.os.Process
 import android.util.Log
@@ -82,6 +83,21 @@ object Shell {
         init()
         ShellContext(systemContext!!)
     }
+
+    /**
+     * A system service's binder interface straight from the service manager,
+     * e.g. ("window", "android.view.IWindowManager"): the framework's cached
+     * getters (WindowManagerGlobal etc.) need app process state the shell
+     * process doesn't have.
+     */
+    fun service(name: String, aidl: String): Any? {
+        val binder = Class.forName("android.os.ServiceManager").getMethod("getService", String::class.java)
+            .invoke(null, name) as IBinder
+        return Class.forName("$aidl\$Stub").getMethod("asInterface", IBinder::class.java).invoke(null, binder)
+    }
+
+    /** Reflection wraps the real failure (often a SecurityException): unwrap it for logging. */
+    fun cause(e: Throwable): Throwable = (e as? java.lang.reflect.InvocationTargetException)?.targetException ?: e
 }
 
 /** Context that identifies as the shell package (we run with the shell uid). */

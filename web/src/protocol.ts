@@ -52,7 +52,7 @@ export function writeHeader(h: FrameHeader, out: Uint8Array): void {
 }
 
 /** Launcher group, from the phone (missing on older engines: Other). */
-export type AppCategory = 'nav' | 'music' | 'social' | 'work' | 'other';
+export type AppCategory = 'nav' | 'energy' | 'music' | 'social' | 'work' | 'other';
 export interface AppInfo { pkg: string; cls: string; label: string; icon?: string; cat?: AppCategory }
 
 export type PhoneMsg =

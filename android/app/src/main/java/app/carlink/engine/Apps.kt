@@ -1,5 +1,6 @@
 package app.carlink.engine
 
+import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
@@ -44,7 +45,7 @@ object Apps {
     }
 
     /**
-     * Launcher group for the car: `nav`, `music`, `social`, `work` or `other`.
+     * Launcher group for the car: `nav`, `energy`, `music`, `social`, `work` or `other`.
      * Known apps first (many don't declare a category), then the app's own
      * `android:appCategory`.
      */
@@ -58,10 +59,15 @@ object Apps {
 
     private val KNOWN: Map<String, String> = buildMap {
         listOf(
-            "com.google.android.apps.maps", "com.waze", "com.iternio.abrpapp", "com.teslamotors.tesla",
-            "net.osmand", "net.osmand.plus", "com.here.app.maps", "com.sygic.aura", "ru.yandex.yandexnavi",
-            "com.google.android.apps.mapslite", "com.plugshare.plugshare", "com.chargemap.android",
+            "com.google.android.apps.maps", "com.waze", "net.osmand", "net.osmand.plus", "com.here.app.maps",
+            "com.sygic.aura", "ru.yandex.yandexnavi", "com.google.android.apps.mapslite",
         ).forEach { put(it, "nav") }
+        // EV charging, route planning for EVs, the car's own app, fuel stations.
+        listOf(
+            "com.iternio.abrpapp", "com.teslamotors.tesla", "com.xatori.Plugshare", "com.chargemap.android",
+            "com.chargepoint.network", "com.energy.eva.chargers", "com.tokamobile.TokaApp", "dev.abodnya.evua",
+            "eu.ecofactor", "com.go.tou", "d2.android.apps.wog", "ua.upg",
+        ).forEach { put(it, "energy") }
         listOf(
             "com.spotify.music", "com.google.android.apps.youtube.music", "com.apple.android.music",
             "deezer.android.app", "com.amazon.mp3", "com.soundcloud.android", "com.aspiro.tidal",
@@ -74,6 +80,11 @@ object Apps {
             "com.facebook.orca", "com.facebook.katana", "com.instagram.android", "com.discord",
             "com.twitter.android", "com.google.android.contacts",
         ).forEach { put(it, "social") }
+        // Taxi and delivery apps declare appCategory="maps" but aren't navigation.
+        listOf(
+            "com.ubercab", "com.ubercab.eats", "ee.mtakso.client", "com.bolt.deliveryclient",
+            "com.lyft.android", "com.glovoapp", "com.glovo", "ua.com.uklontaxi", "com.wolt.android", "com.ubercab.driver", "ee.mtakso.driver",
+        ).forEach { put(it, "other") }
         listOf(
             "com.google.android.gm", "com.google.android.calendar", "com.Slack", "com.microsoft.teams",
             "com.microsoft.office.outlook", "com.google.android.apps.meetings", "us.zoom.videomeetings",
@@ -123,6 +134,10 @@ object Apps {
     /** Start an activity on a display. Runs `am` with our shell rights. */
     fun launch(pkg: String, cls: String, displayId: Int): Boolean {
         if (!VALID_NAME.matches(pkg) || !VALID_NAME.matches(cls) || pkg in HIDDEN) return false
+        // Open on another display (the phone screen)? Close it there first so it
+        // starts fresh on the car instead of being moved across displays (see
+        // the DESTROY_CONTENT_ON_REMOVAL note in Pane.createDisplay).
+        closeElsewhere(pkg, displayId)
         val output = am(
             "start", "--display", displayId.toString(), "--windowingMode", "1",
             "-a", Intent.ACTION_MAIN, "-c", Intent.CATEGORY_LAUNCHER,
@@ -140,10 +155,95 @@ object Apps {
      */
     fun close(displayId: Int, pkg: String?): Int {
         if (pkg != null && !VALID_NAME.matches(pkg)) return 0
+        // Fast path: the task manager directly (no `am` process per task, so
+        // the engine thread isn't blocked for seconds on a close-all).
+        tasksOn(displayId)?.let { tasks ->
+            val ids = tasks.filter { (_, pkgs) -> pkg == null || pkg in pkgs }.map { it.first }
+            ids.forEach { removeTask(it) }
+            return ids.size
+        }
         val list = am("stack", "list") ?: return 0
         val ids = rootTasks(list, displayId, pkg)
         ids.forEach { am("stack", "remove", it.toString()) }
         return ids.size
+    }
+
+    /**
+     * Packages that must never run on the car display, even when an allowed
+     * app opens them itself (an in-app "open settings" or "rate us" link): the
+     * launcher can't start them ([HIDDEN]), and this closes them if they
+     * appear anyway. The keyboard's own settings open as Gboard activities.
+     */
+    val DENIED_ON_CAR = HIDDEN + setOf("com.google.android.inputmethod.latin")
+
+    /** Close tasks of [DENIED_ON_CAR] packages on a display; returns the packages closed. */
+    fun closeDenied(displayId: Int): Set<String> {
+        val tasks = tasksOn(displayId) ?: return emptySet()
+        val closed = HashSet<String>()
+        for ((id, pkgs) in tasks) {
+            val bad = pkgs.filter { it in DENIED_ON_CAR }
+            if (bad.isNotEmpty() && removeTask(id)) closed += bad
+        }
+        return closed
+    }
+
+    private val taskManager: Any? by lazy {
+        try {
+            Shell.service("activity_task", "android.app.IActivityTaskManager")
+        } catch (e: Exception) {
+            Log.w(TAG, "task manager unavailable, using am: $e")
+            null
+        }
+    }
+
+    /** Remove [pkg]'s tasks on displays other than [displayId]. */
+    private fun closeElsewhere(pkg: String, displayId: Int) {
+        val atm = taskManager ?: return
+        try {
+            val all = atm.javaClass.getMethod("getAllRootTaskInfos").invoke(atm) as List<*>
+            taskInfos(all).filter { (id, pkgs, display) -> display >= 0 && display != displayId && pkg in pkgs && id > 0 }
+                .forEach { (id, _, display) ->
+                    Log.i(TAG, "$pkg: closing its task on display $display before starting it on the car")
+                    removeTask(id)
+                }
+        } catch (e: Exception) {
+            Log.w(TAG, "task list: $e")
+        }
+    }
+
+    /** Root tasks on a display with the packages in them (hidden API); null if unavailable. */
+    private fun tasksOn(displayId: Int): List<Pair<Int, Set<String>>>? {
+        val atm = taskManager ?: return null
+        return try {
+            val list = atm.javaClass.getMethod("getAllRootTaskInfosOnDisplay", Int::class.javaPrimitiveType)
+                .invoke(atm, displayId) as List<*>
+            taskInfos(list).map { (id, pkgs, _) -> id to pkgs }
+        } catch (e: Exception) {
+            Log.w(TAG, "task list: $e")
+            null
+        }
+    }
+
+    /** (task id, packages in it, display id) from RootTaskInfo objects. */
+    private fun taskInfos(list: List<*>): List<Triple<Int, Set<String>, Int>> =
+            list.filterNotNull().map { info ->
+                val c = info.javaClass
+                val pkgs = HashSet<String>()
+                for (f in listOf("baseActivity", "topActivity", "realActivity", "origActivity")) {
+                    (runCatching { c.getField(f).get(info) }.getOrNull() as? ComponentName)?.let { pkgs += it.packageName }
+                }
+                (runCatching { c.getField("childTaskNames").get(info) }.getOrNull() as? Array<*>)?.forEach { name ->
+                    (name as? String)?.let { ComponentName.unflattenFromString(it)?.packageName }?.let { pkgs += it }
+                }
+                val display = runCatching { c.getField("displayId").getInt(info) }.getOrDefault(-1)
+                Triple(c.getField("taskId").getInt(info), pkgs, display)
+            }
+
+    private fun removeTask(id: Int): Boolean = try {
+        val atm = taskManager!!
+        atm.javaClass.getMethod("removeTask", Int::class.javaPrimitiveType).invoke(atm, id) as Boolean
+    } catch (e: Exception) {
+        am("stack", "remove", id.toString()) != null
     }
 
     /**

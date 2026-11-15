@@ -102,6 +102,14 @@ with checksums. The car page itself deploys to GitHub Pages on every push to
 - The car screen works while the phone is locked, so system settings, Shizuku,
   app stores, installers and file managers are never offered in the car.
 - Notifications in the car follow your lock-screen settings.
+- The on-screen keyboard appears on the car screen, also while the phone is
+  locked; its suggestions and clipboard chip can show there. Apps can't open
+  Settings, Play Store, installers or the keyboard's settings in the car:
+  carlink closes them.
+- On phones where the car screen shares the phone's power state (seen on a
+  Pixel with Android 17), carlink keeps the phone awake and locked with its own
+  screen switched off while the car is connected. Press power to use the
+  phone; it goes dark again after the screen timeout.
 - Don't operate the screen while driving beyond what you would do with the
   car's own UI.
 

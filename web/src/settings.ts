@@ -11,20 +11,23 @@ export const DEFAULT_DISPLAY: Display = { showText: true };
 
 /** Shortest side of the phone's display in dp: just above the 600 dp where apps switch to phone layouts. */
 const TARGET_SW_DP = 640;
-const MIN_CSS_DPI = 200;
+const MIN_DPI = 200;
 const MAX_CSS_DPI = 260;
 
 /**
  * `layout.dpi` for a w x h device-pixel pane: the biggest UI that keeps apps
- * in their wide (tablet) layout. The Tesla browser leaves ~880 px of height
- * (normal or expanded) -> ~220 dpi; full screen -> 260. Bounds scale with the
- * pixel ratio, so a high-DPI test screen shows the same layout.
+ * in their wide (tablet) layout (shortest side ~640 dp). Tesla, measured in
+ * the car: the browser zooms by 1.53, and the normal window leaves a
+ * 1036x918 px pane -> 230 dpi. The floor is in device pixels: scaling it by
+ * the zoom (306 dpi there) gave phone layouts and a cramped UI. The ceiling
+ * scales with the pixel ratio, so a high-DPI test screen shows the same
+ * layout as the car.
  */
 export function paneDpi(w: number, h: number, dpr: number): number {
   const r = dpr > 0 ? dpr : 1;
   const side = Math.min(w, h);
   const ideal = side > 0 ? Math.round((side * 160) / TARGET_SW_DP) : PANE_DPI * r;
-  const dpi = Math.min(MAX_CSS_DPI * r, Math.max(MIN_CSS_DPI * r, ideal));
+  const dpi = Math.min(MAX_CSS_DPI * r, Math.max(MIN_DPI, ideal));
   return Math.min(DPI_MAX, Math.max(DPI_MIN, Math.round(dpi)));
 }
 

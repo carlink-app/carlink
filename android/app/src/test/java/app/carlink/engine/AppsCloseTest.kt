@@ -34,7 +34,12 @@ class AppsCloseTest {
 
     @Test fun knownAppsBeatDeclaredCategory() {
         assertEquals("nav", Apps.category("com.waze", android.content.pm.ApplicationInfo.CATEGORY_UNDEFINED))
+        // Charging/fuel apps declare "maps" too, but get their own group.
+        assertEquals("energy", Apps.category("com.xatori.Plugshare", android.content.pm.ApplicationInfo.CATEGORY_MAPS))
+        assertEquals("energy", Apps.category("com.iternio.abrpapp", android.content.pm.ApplicationInfo.CATEGORY_MAPS))
         assertEquals("social", Apps.category("org.telegram.messenger", android.content.pm.ApplicationInfo.CATEGORY_PRODUCTIVITY))
+        assertEquals("other", Apps.category("com.ubercab", android.content.pm.ApplicationInfo.CATEGORY_MAPS))
+        assertEquals("other", Apps.category("ee.mtakso.client", android.content.pm.ApplicationInfo.CATEGORY_MAPS))
     }
 
     @Test fun declaredCategory() {
@@ -44,4 +49,58 @@ class AppsCloseTest {
     }
 
     @Test fun noDisplay() = assertEquals(emptyList<Int>(), Apps.rootTasks(list, 7, null))
+
+    @Test fun emptyOrJunkOutput() {
+        assertEquals(emptyList<Int>(), Apps.rootTasks("", 3, null))
+        assertEquals(emptyList<Int>(), Apps.rootTasks("Error: unknown command\n", 3, "com.waze"))
+    }
+
+    @Test fun taskLinesBeforeAnyRootAreIgnored() {
+        val l = "  taskId=5: com.waze/com.waze.Main\nRootTask id=9 bounds=[0,0][1,1] displayId=3 userId=0\n  taskId=9: x.y/x.y.Main"
+        assertEquals(emptyList<Int>(), Apps.rootTasks(l, 3, "com.waze"))
+        assertEquals(listOf(9), Apps.rootTasks(l, 3, null))
+    }
+
+    @Test fun matchInOneRootDoesNotLeakIntoTheNext() {
+        // The match flag resets at each header: only the root holding com.waze is closed.
+        val l = """
+            RootTask id=10 bounds=[0,0][1,1] displayId=3 userId=0
+              taskId=11: com.waze/com.waze.Main
+            RootTask id=20 bounds=[0,0][1,1] displayId=3 userId=0
+              taskId=21: com.spotify.music/com.spotify.Main
+        """.trimIndent()
+        assertEquals(listOf(10), Apps.rootTasks(l, 3, "com.waze"))
+        assertEquals(listOf(20), Apps.rootTasks(l, 3, "com.spotify.music"))
+    }
+
+    @Test fun packageInLaterTaskOfARootMatches() {
+        val l = """
+            RootTask id=10 bounds=[0,0][1,1] displayId=3 userId=0
+              taskId=11: x.first/x.first.Main
+              taskId=12: com.waze/com.waze.Main
+        """.trimIndent()
+        assertEquals(listOf(10), Apps.rootTasks(l, 3, "com.waze"))
+    }
+
+    @Test fun displayIdIsMatchedWhole() {
+        // displayId=13 must not count as display 3 (nor 1).
+        val l = "RootTask id=10 bounds=[0,0][1,1] displayId=13 userId=0\n  taskId=11: com.waze/com.waze.Main"
+        assertEquals(emptyList<Int>(), Apps.rootTasks(l, 3, null))
+        assertEquals(emptyList<Int>(), Apps.rootTasks(l, 1, null))
+        assertEquals(listOf(10), Apps.rootTasks(l, 13, "com.waze"))
+    }
+
+    @Test fun packageNamedOnlyInTopActivityDoesNotMatch() {
+        // Only the task's own component counts, not a mention elsewhere on the line.
+        val l = "RootTask id=10 bounds=[0,0][1,1] displayId=3 userId=0\n  taskId=11: x.y/x.y.Main topActivity=ComponentInfo{com.waze/com.waze.Main}"
+        assertEquals(emptyList<Int>(), Apps.rootTasks(l, 3, "com.waze"))
+    }
+
+    @Test fun declaredSocialAndProductivity() {
+        assertEquals("social", Apps.category("x.y", android.content.pm.ApplicationInfo.CATEGORY_SOCIAL))
+        assertEquals("work", Apps.category("x.y", android.content.pm.ApplicationInfo.CATEGORY_PRODUCTIVITY))
+        assertEquals("other", Apps.category("x.y", android.content.pm.ApplicationInfo.CATEGORY_UNDEFINED))
+        assertEquals("music", Apps.category("com.spotify.music", android.content.pm.ApplicationInfo.CATEGORY_UNDEFINED))
+        assertEquals("work", Apps.category("com.google.android.gm", android.content.pm.ApplicationInfo.CATEGORY_UNDEFINED))
+    }
 }

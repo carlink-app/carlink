@@ -116,10 +116,20 @@ describe('paneDpi', () => {
     // (A window under ~750 px tall hits the 200 dpi floor and gets phone layouts; fine.)
     for (const h of [800, 880, 1000, 1150]) expect((h * 160) / paneDpi(1840, h, 1)).toBeGreaterThanOrEqual(600);
   });
-  it('bounded to 200..260 dpi (x pixel ratio)', () => {
+  it('bounded to 200..260 dpi (ceiling x pixel ratio)', () => {
     expect(paneDpi(1920, 1150, 1)).toBe(260); // full screen: capped
     expect(paneDpi(800, 480, 1)).toBe(200);
-    expect(paneDpi(3648, 1810, 2)).toBe(453); // 2x test screen: same layout as 905 css px
+    expect(paneDpi(3648, 1810, 2)).toBe(453); // 2x test screen: same layout as the car
+  });
+  it('Tesla as measured (zoom 1.53, 1036x918 pane): tablet layout, not phone', () => {
+    const dpi = paneDpi(1036, 918, 1.53);
+    expect(dpi).toBe(230);
+    expect((918 * 160) / dpi).toBeGreaterThanOrEqual(600);
+  });
+  it('floor is in device pixels (not scaled by zoom), ceiling is', () => {
+    expect(paneDpi(800, 480, 2)).toBe(200); // a scaled floor would give 400
+    expect(paneDpi(1036, 700, 1.53)).toBe(200);
+    expect(paneDpi(1920, 1600, 1.53)).toBe(398); // 260 x 1.53
   });
   it('stays within the phone\'s 72..640 and survives bad input', () => {
     expect(paneDpi(4000, 4000, 3)).toBe(640);
