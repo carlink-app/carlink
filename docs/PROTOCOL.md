@@ -79,9 +79,10 @@ normal use; dev builds may allow any address.
 Page -> phone:
 
 ```json
-{"t":"hello","v":2,"w":1920,"h":1200,"dpr":1,"codecs":["h264","hevc"]}
+{"t":"hello","v":2,"w":1920,"h":1200,"dpr":1,"codecs":["h264","hevc"],"icons":"hash"}
 {"t":"layout","panes":[{"id":0,"w":1824,"h":1200,"dpi":200}]}
 {"t":"apps"}
+{"t":"app-icons","pkgs":["com.waze","com.spotify.music"]}
 {"t":"launch","pane":0,"pkg":"com.google.android.apps.maps","cls":"com.google.android.maps.MapsActivity"}
 {"t":"touch","pane":0,"a":"down","id":0,"x":512.0,"y":300.5}
 {"t":"key","pane":0,"k":"back"}
@@ -117,7 +118,8 @@ Phone -> page:
 ```json
 {"t":"hello","v":2,"device":"Pixel 9 Pro","android":36}
 {"t":"pane","id":0,"w":1824,"h":1200,"codec":"h264"}
-{"t":"apps","list":[{"pkg":"...","cls":"...","label":"Maps","cat":"nav","icon":"data:image/png;base64,..."}]}
+{"t":"apps","list":[{"pkg":"...","cls":"...","label":"Maps","cat":"nav","ih":"5f3a9c1e-4180"}]}
+{"t":"app-icons","list":[{"pkg":"...","ih":"5f3a9c1e-4180","icon":"data:image/png;base64,..."}]}
 {"t":"launched","pane":0,"pkg":"..."}
 {"t":"error","msg":"..."}
 {"t":"notif","id":"n3f9a1c","pkg":"com.whatsapp","app":"WhatsApp","title":"Alice","text":"On my way","icon":"data:image/png;base64,...","kind":"msg"}
@@ -125,6 +127,11 @@ Phone -> page:
 {"t":"notif-reset"}
 ```
 
+- `apps`: if the page's `hello` had `icons: "hash"`, no icons, only `ih`, a
+  short hash of each icon (otherwise icons inline, as before). The page keeps
+  icons (IndexedDB) and asks for missing or changed ones with `app-icons`
+  (up to 400 packages) once video is running; the phone answers in batches
+  of 16, 40 ms apart, so the first frames get the link.
 - `apps.cat`: launcher group, `nav` | `energy` | `music` | `social` | `work` | `other`
   (known apps first, then the app's declared category). Missing or unknown
   = `other`. The page shows the groups in that order.

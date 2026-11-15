@@ -20,7 +20,7 @@ use std::time::{Duration, Instant};
 
 pub const MIN_LEVEL: u32 = 150;
 pub const MAX_LEVEL: u32 = 1000;
-pub const START_LEVEL: u32 = 600;
+pub const START_LEVEL: u32 = 800;
 
 /// RTT above the floor that counts as queueing.
 const RTT_SLACK: Duration = Duration::from_millis(30);
@@ -72,6 +72,12 @@ impl RateControl {
             last_increase: now,
             history: 0,
         }
+    }
+
+    /// Tests that need room to climb start below START_LEVEL.
+    #[cfg(test)]
+    fn starting_at(now: Instant, level: u32) -> Self {
+        RateControl { level, ..Self::new(now) }
     }
 
     pub fn level(&self) -> u32 {
@@ -170,7 +176,7 @@ mod tests {
     #[test]
     fn rtt_growth_counts_as_congestion_but_jitter_within_slack_does_not() {
         let mut t = Instant::now();
-        let mut rc = RateControl::new(t);
+        let mut rc = RateControl::starting_at(t, 400);
         run(&mut rc, &mut t, 2, clean(5));
         let before = rc.level();
         // +20 ms: within slack, still increasing.
@@ -224,7 +230,7 @@ mod tests {
     #[test]
     fn increases_at_most_once_per_clean_second_by_an_eighth_plus_20() {
         let mut t = Instant::now();
-        let mut rc = RateControl::new(t);
+        let mut rc = RateControl::starting_at(t, 400);
         let mut changes = Vec::new();
         for i in 1..=10 {
             t += 200 * MS;
@@ -232,7 +238,7 @@ mod tests {
                 changes.push((i, l));
             }
         }
-        let first = START_LEVEL + START_LEVEL / 8 + 20;
+        let first = 400 + 400 / 8 + 20;
         assert_eq!(changes, vec![(5, first), (10, first + first / 8 + 20)]);
     }
 

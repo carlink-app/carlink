@@ -177,7 +177,7 @@ export class Connection {
     markConnected();
     this.hooks.onSession();
     const codecs = await this.hooks.codecs();
-    this.send({ t: 'hello', v: PROTOCOL_VERSION, w: innerWidth, h: innerHeight, dpr: devicePixelRatio, codecs });
+    this.send({ t: 'hello', v: PROTOCOL_VERSION, w: innerWidth, h: innerHeight, dpr: devicePixelRatio, codecs, icons: 'hash' });
     const panes = this.hooks.layout();
     this.send({ t: 'layout', panes });
     this.send({ t: 'apps' });

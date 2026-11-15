@@ -8,6 +8,7 @@ import android.os.Handler
 import android.os.HandlerThread
 import android.util.Log
 import android.view.KeyEvent
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
 import java.util.concurrent.CountDownLatch
@@ -28,6 +29,10 @@ class Engine(private val code: String, port: Int, allow: String) : NativeCore.Li
         private const val APPS_TTL_MS = 30_000L
         private const val PANE_GRACE_MS = 30_000L
         private const val GUARD_MS = 1_000L
+        private const val MAX_ICON_REQUEST = 500
+        private const val MAX_PKG_CHARS = 255
+        private const val ICONS_PER_MESSAGE = 16
+        private const val ICONS_SPACING_MS = 40L
         private const val REPLAY_MS = 5 * 60_000L
     }
 
@@ -35,10 +40,14 @@ class Engine(private val code: String, port: Int, allow: String) : NativeCore.Li
     private val handler = Handler(thread.looper)
     private val panes = HashMap<Int, Pane>()
     private val phonePower by lazy { PhonePower(handler) }
+    /** Bumped per session: pending icon batches of an older one are dropped. */
+    private var iconGeneration = 0
+    /** The car page fetches icons by hash (hello `icons: "hash"`); else they go inline. */
+    private var iconsByHash = false
     private val lastLaunch = HashMap<Int, Pair<String, String>>()
     /** Chosen per session from what the car decodes (HEVC preferred). */
     private var codec = "h264"
-    private var level = 600
+    private var level = 800
     private var apps: Apps.Listing? = null
     /** Notifications still on the phone, re-sent to a car that (re)connects. */
     private val activeNotifs = object : LinkedHashMap<String, Pair<JSONObject, Long>>() {
@@ -182,6 +191,7 @@ class Engine(private val code: String, port: Int, allow: String) : NativeCore.Li
         handler.removeCallbacks(releaseIdlePanes)
         if (!connected) handler.postDelayed(releaseIdlePanes, PANE_GRACE_MS)
         status = if (connected) "car connected ($remote)" else "waiting for car"
+        iconGeneration++ // icon batches of an earlier session are dropped
         reportSession(connected)
     }
 
@@ -222,6 +232,7 @@ class Engine(private val code: String, port: Int, allow: String) : NativeCore.Li
                 val codecs = m.optJSONArray("codecs")
                 val hevc = codecs != null && (0 until minOf(codecs.length(), 8)).any { codecs.optString(it) == "hevc" }
                 codec = if (hevc && Codecs.hasEncoder("hevc")) "hevc" else "h264"
+                iconsByHash = m.optString("icons") == "hash"
                 Log.i(TAG, "car hello: ${m.optInt("w")}x${m.optInt("h")}, hevc=$hevc, using $codec")
                 send(JSONObject().put("t", "hello").put("v", 2).put("device", Build.MODEL).put("android", Build.VERSION.SDK_INT))
                 // The page clears banners on a new session: calls in progress and
@@ -232,7 +243,39 @@ class Engine(private val code: String, port: Int, allow: String) : NativeCore.Li
                     .forEach { send(JSONObject(it.first.toString()).put("replay", true)) }
             }
             "layout" -> layout(m)
-            "apps" -> send(JSONObject().put("t", "apps").put("list", listing().json))
+            "apps" -> {
+                val l = listing()
+                // Pages from before icon caching need the icons inline.
+                val list = if (iconsByHash) l.json else JSONArray().also { out ->
+                    for (i in 0 until l.json.length()) {
+                        val a = JSONObject(l.json.getJSONObject(i).toString())
+                        l.icons[a.getString("pkg")]?.let { a.put("icon", it) }
+                        out.put(a)
+                    }
+                }
+                send(JSONObject().put("t", "apps").put("list", list))
+            }
+            // Icons the car doesn't have yet, a few per message so video keeps flowing.
+            "app-icons" -> {
+                val want = m.optJSONArray("pkgs") ?: return
+                val icons = listing().icons
+                val found = (0 until minOf(want.length(), MAX_ICON_REQUEST))
+                    .map { want.optString(it) }
+                    .filter { it.length <= MAX_PKG_CHARS }
+                    .toSet() // a package once, however often it's asked for
+                    .mapNotNull { pkg -> icons[pkg]?.let { pkg to it } }
+                val gen = iconGeneration
+                found.chunked(ICONS_PER_MESSAGE).forEachIndexed { n, chunk ->
+                    handler.postDelayed({
+                        // Stale (engine stopped, or a new session started): drop.
+                        if (core.get() == 0L || gen != iconGeneration) return@postDelayed
+                        val list = JSONArray()
+                        // With its hash: the page keeps it only if its list has the same one.
+                        chunk.forEach { (pkg, icon) -> list.put(JSONObject().put("pkg", pkg).put("ih", Apps.iconHash(icon)).put("icon", icon)) }
+                        send(JSONObject().put("t", "app-icons").put("list", list))
+                    }, n * ICONS_SPACING_MS)
+                }
+            }
             "launch" -> {
                 val id = m.getInt("pane")
                 val pane = panes[id] ?: return

@@ -9,6 +9,7 @@ import { PANE_DPI, type AppInfo, type FromWorker, type PageMsg, type PaneLayout,
 import { makeCert, weekStart } from './cert';
 import { ErrorWindow, fingerprint, LogRing, maskCode, resolveCode, shortUA, utcStamp } from './diag';
 import { afterClose, groupApps } from './apps';
+import { applyCache, loadIcons, MAX_CACHED, saveIcons, validIcon, type CachedIcon } from './iconcache';
 import {
   addBanner, addToTray, callsFirst, nextExpiry, pruneExpired, removeBanner, removeFromTray, sanitizeNotif, trayBadge, trayOthers, validId,
   type Banner, type Notif,
@@ -172,6 +173,8 @@ const conn = new Connection({
   onStatus: showStatus,
   onMessage,
   onSession: () => {
+    performance.mark('carlink:session');
+    firstFrameMarked = false;
     rtt.clear();
     for (const p of panes) p.video = null;
     toWorker({ type: 'reset' });
@@ -215,7 +218,8 @@ function onMessage(m: PhoneMsg) {
       }
       break;
     }
-    case 'apps': setApps(Array.isArray(m.list) ? m.list : []); break;
+    case 'apps': void onApps(Array.isArray(m.list) ? m.list : []); break;
+    case 'app-icons': if (Array.isArray(m.list)) onIcons(m.list); break;
     case 'rate': rateKbps = Number(m.kbps) || 0; break;
     case 'error': toast(`Phone: ${m.msg}`); break;
     case 'notif': {
@@ -233,6 +237,9 @@ function onMessage(m: PhoneMsg) {
     case 'launched': if (m.pane === 0 && m.pkg === openingPkg) openingDone(OPENING_AFTER_LAUNCH_MS); break;
   }
 }
+
+/** Startup timing marks (performance.mark) for dev/perf tools. */
+let firstFrameMarked = false;
 
 // ---------- notification banners and tray ----------
 
@@ -459,6 +466,12 @@ worker.onmessage = (e: MessageEvent<FromWorker>) => {
     const p = panes.find((x) => x.id === m.stats.pane);
     if (p) p.stats = m.stats;
     renderDebug();
+  } else if (m.type === 'firstDraw') {
+    if (!firstFrameMarked) {
+      firstFrameMarked = true;
+      performance.mark('carlink:firstFrame');
+      requestIcons(); // video is running: now the icons may use the link
+    }
   } else if (m.type === 'log') {
     console.log(`[worker] ${m.text}`);
     logLine(m.text);
@@ -492,6 +505,73 @@ function toast(text: string) {
   toastTimer = window.setTimeout(() => { $('toast').textContent = ''; }, 4000);
 }
 
+// ---------- app icons: cached in the browser, fetched after the first frame ----------
+
+let iconCache = new Map<string, CachedIcon>();
+// A storage that never answers mustn't hold up the launcher.
+const iconCacheReady = Promise.race([loadIcons(), new Promise<Map<string, CachedIcon>>((r) => setTimeout(() => r(new Map()), 500))])
+  .then((c) => { iconCache = c; });
+let missingIcons: string[] = [];
+/** Asked for and not yet received: only these are accepted. */
+const requestedIcons = new Set<string>();
+let iconsTimer = 0;
+let iconsRender = 0;
+/** Under the phone's 16 KB control line limit, with room to spare. */
+const ICON_REQUEST_BYTES = 12_000;
+const MAX_PKG_CHARS = 255;
+
+async function onApps(list: AppInfo[]) {
+  await iconCacheReady;
+  const t0 = performance.now();
+  const valid = list.filter((a) => a && typeof a.pkg === 'string');
+  missingIcons = applyCache(valid, iconCache).filter((p) => p.length <= MAX_PKG_CHARS).slice(0, MAX_CACHED);
+  setApps(valid);
+  performance.measure('carlink:apps', { start: t0, end: performance.now(), detail: { count: apps.length, missingIcons: missingIcons.length } });
+  void saveIcons(new Map(), new Set(valid.map((a) => a.pkg))); // forget uninstalled apps
+  // Asked for at the first frame; if video is already running, now; the timer
+  // covers a session without video.
+  clearTimeout(iconsTimer);
+  if (firstFrameMarked) requestIcons();
+  else iconsTimer = window.setTimeout(requestIcons, 2000);
+}
+
+function requestIcons() {
+  clearTimeout(iconsTimer);
+  requestedIcons.clear();
+  // Split by size: one line must stay under the phone's control line limit.
+  let pkgs: string[] = [];
+  let bytes = 0;
+  const flush = () => { if (pkgs.length) send({ t: 'app-icons', pkgs }); pkgs = []; bytes = 0; };
+  for (const p of missingIcons) {
+    if (bytes + p.length + 3 > ICON_REQUEST_BYTES) flush();
+    pkgs.push(p);
+    bytes += p.length + 3;
+    requestedIcons.add(p);
+  }
+  flush();
+  missingIcons = [];
+}
+
+function onIcons(list: { pkg: string; ih: string; icon: string }[]) {
+  const add = new Map<string, CachedIcon>();
+  for (const it of list) {
+    // Only icons we asked for, and only valid ones (size-capped PNG).
+    if (!it || typeof it.pkg !== 'string' || !requestedIcons.delete(it.pkg) || !validIcon(it.icon)) continue;
+    for (const a of apps) {
+      // Same hash only: the phone's list may have changed since ours.
+      if (a.pkg !== it.pkg || typeof a.ih !== 'string' || a.ih !== it.ih) continue;
+      a.icon = it.icon;
+      add.set(a.pkg, { h: a.ih, icon: it.icon });
+    }
+  }
+  if (!add.size) return;
+  void saveIcons(add);
+  for (const [k, v] of add) iconCache.set(k, v);
+  // Batches arrive ~40 ms apart: redraw the grid once they settle.
+  clearTimeout(iconsRender);
+  iconsRender = window.setTimeout(() => setApps(apps), 150);
+}
+
 // ---------- apps, launcher, recents ----------
 
 let apps: AppInfo[] = [];
@@ -506,8 +586,7 @@ function loadRecents(): AppInfo[] {
 }
 
 /** Only PNG data URLs from the phone; anything else gets the letter fallback. */
-const vettedIcon = (a: AppInfo): string | undefined =>
-  typeof a.icon === 'string' && a.icon.startsWith('data:image/png;base64,') ? a.icon : undefined;
+const vettedIcon = (a: AppInfo): string | undefined => (validIcon(a.icon) ? a.icon : undefined);
 
 function appIcon(a: AppInfo): HTMLElement {
   return iconEl(a.label, vettedIcon(a));
@@ -531,7 +610,12 @@ function iconEl(label: string, src: string | undefined): HTMLElement {
 function setApps(list: AppInfo[]) {
   apps = list.filter((a) => a && typeof a.pkg === 'string');
   // Refresh recents' icons/labels from the phone's list.
-  recents = recents.map((r) => apps.find((a) => a.pkg === r.pkg && a.cls === r.cls) ?? r);
+  // Keep a stored icon until the phone's arrives (fetched after the first frame).
+  recents = recents.map((r) => {
+    const a = apps.find((x) => x.pkg === r.pkg && x.cls === r.cls);
+    if (!a) return r;
+    return a.icon || !r.icon ? a : { ...a, icon: r.icon };
+  });
   renderRecents();
   $('grid').replaceChildren(...groupApps(apps).map((g) => {
     const section = document.createElement('section');
@@ -726,7 +810,7 @@ function renderDebug() {
       + (s?.width ? `, ${s.width}x${s.height} video` : ''));
     if (!s) continue;
     lines.push(`codec  ${s.codec ?? '-'}${s.waitingKey ? '  (waiting for keyframe)' : ''}`);
-    lines.push(`fps    ${s.fps}`);
+    lines.push(`fps    ${s.fps}  gap max ${s.maxGapMs ?? '-'} ms  stalls ${s.stalls}`);
     lines.push(`decode p50 ${ms(s.decodeP50)}  p95 ${ms(s.decodeP95)} ms  queue ${s.queue}`);
     lines.push(`drop   decoded ${s.droppedDecoded}  encoded ${s.droppedEncoded}  errors ${s.errors}`);
   }

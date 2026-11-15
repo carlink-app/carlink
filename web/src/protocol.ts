@@ -53,7 +53,8 @@ export function writeHeader(h: FrameHeader, out: Uint8Array): void {
 
 /** Launcher group, from the phone (missing on older engines: Other). */
 export type AppCategory = 'nav' | 'energy' | 'music' | 'social' | 'work' | 'other';
-export interface AppInfo { pkg: string; cls: string; label: string; icon?: string; cat?: AppCategory }
+/** `ih`: hash of the app's icon; the icon itself comes on request (`app-icons`), unless sent inline. */
+export interface AppInfo { pkg: string; cls: string; label: string; icon?: string; ih?: string; cat?: AppCategory }
 
 export type PhoneMsg =
   | { t: 'challenge'; v: number; nonce: string }
@@ -61,6 +62,7 @@ export type PhoneMsg =
   | { t: 'hello'; v: number; device?: string; android?: number }
   | { t: 'pane'; id: number; w: number; h: number; codec: Codec }
   | { t: 'apps'; list: AppInfo[] }
+  | { t: 'app-icons'; list: { pkg: string; ih: string; icon: string }[] }
   | { t: 'launched'; pane: number; pkg: string }
   /** Phone's rate control: level in permille of the codec's max bitrate. */
   | { t: 'rate'; level: number; kbps: number }
@@ -77,9 +79,12 @@ export interface PaneLayout { id: number; w: number; h: number; dpi: number }
 
 export type PageMsg =
   | { t: 'auth'; mac: string }
-  | { t: 'hello'; v: number; w: number; h: number; dpr: number; codecs: Codec[] }
+  /** `icons: 'hash'`: the page fetches icons with `app-icons` (else the phone sends them inline). */
+  | { t: 'hello'; v: number; w: number; h: number; dpr: number; codecs: Codec[]; icons?: 'hash' }
   | { t: 'layout'; panes: PaneLayout[] }
   | { t: 'apps' }
+  /** Icons the page doesn't have (by package); answered in small batches. */
+  | { t: 'app-icons'; pkgs: string[] }
   | { t: 'launch'; pane: number; pkg: string; cls: string }
   | { t: 'touch'; pane: number; a: 'down' | 'move' | 'up' | 'cancel'; id: number; x: number; y: number }
   | { t: 'key'; pane: number; k: 'back' | 'home' }
@@ -114,9 +119,15 @@ export interface PaneStats {
   queue: number;
   errors: number;
   waitingKey: boolean;
+  /** Longest time between two drawn frames in the last second (ms; null = none drawn). */
+  maxGapMs: number | null;
+  /** Freezes since the session started: frames drawn more than STALL_MS later than their phone timestamps say (a still screen sends nothing and doesn't count). */
+  stalls: number;
 }
 
 export type FromWorker =
+  /** First frame drawn after a reset (session start). */
+  | { type: 'firstDraw'; pane: number }
   | { type: 'keyframe'; pane: number }
   | { type: 'stats'; stats: PaneStats }
   | { type: 'log'; text: string }

@@ -18,7 +18,11 @@ import java.util.concurrent.TimeUnit
 object Apps {
     private const val ICON_PX = 96
 
-    class Listing(val json: JSONArray, val components: Set<Pair<String, String>>, val at: Long)
+    /** [json] has no icons, only their hashes ("ih"); [icons] holds them (package -> data URL). */
+    class Listing(val json: JSONArray, val components: Set<Pair<String, String>>, val icons: Map<String, String>, val at: Long)
+
+    /** Short, stable id of an icon: the car keeps icons and only asks for changed ones. */
+    fun iconHash(icon: String): String = Integer.toHexString(icon.hashCode()) + "-" + icon.length
 
     /**
      * Launchable apps with small PNG icons, for the car launcher grid (the
@@ -30,18 +34,26 @@ object Apps {
         val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
         val out = JSONArray()
         val components = HashSet<Pair<String, String>>()
+        val iconsOut = HashMap<String, String>()
         for (ri in pm.queryIntentActivities(intent, 0)) {
             val pkg = ri.activityInfo.packageName
             val cls = ri.activityInfo.name
             if (pkg in HIDDEN) continue
             try {
-                out.put(JSONObject().put("pkg", pkg).put("cls", cls).put("label", ri.loadLabel(pm).toString()).put("cat", category(pkg, ri.activityInfo.applicationInfo.category)).put("icon", icons[pkg] ?: icon(pm, ri) ?: ""))
+                val icon = icons[pkg] ?: icon(pm, ri) ?: ""
+                val entry = JSONObject().put("pkg", pkg).put("cls", cls).put("label", ri.loadLabel(pm).toString())
+                    .put("cat", category(pkg, ri.activityInfo.applicationInfo.category))
+                if (icon.isNotEmpty()) {
+                    entry.put("ih", iconHash(icon))
+                    iconsOut[pkg] = icon
+                }
+                out.put(entry)
                 components += pkg to cls
             } catch (e: Exception) {
                 Log.w(TAG, "skip $pkg: $e")
             }
         }
-        return Listing(out, components, System.currentTimeMillis())
+        return Listing(out, components, iconsOut, System.currentTimeMillis())
     }
 
     /**
