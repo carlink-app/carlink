@@ -385,7 +385,9 @@ impl Server {
             let key = Arc::new(auth_key(&opts.code));
             let pending = Arc::new(Semaphore::new(MAX_PENDING));
             rt.spawn(async move {
-                for id in 1u64.. {
+                let mut id = 0u64;
+                loop {
+                    id += 1;
                     let incoming = endpoint.accept().await;
                     let (shared, listener, key, pending, allow) = (shared.clone(), listener.clone(), key.clone(), pending.clone(), allow.clone());
                     tokio::spawn(async move {
