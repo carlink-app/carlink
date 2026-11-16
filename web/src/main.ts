@@ -559,7 +559,7 @@ let statusTimer = 0;
 let lastStatus: Status = { s: 'idle', text: '' };
 function showStatus(st: Status) {
   // While pairing, failed attempts are expected (the phone hasn't scanned yet).
-  if (pairingSecret && st.s !== 'connected') {
+  if ((pairingSecret || performance.now() < pairedQuietUntil) && st.s !== 'connected') {
     $('pair-qr-status').textContent = 'Waiting for your phone…';
     return;
   }
@@ -1072,6 +1072,9 @@ function renderDebug() {
 
 /** The one-time secret shown as a QR code, while pairing; it stands in for the code. */
 let pairingSecret: string | null = null;
+/** Just paired: the phone switches back to the real code; failed tries meanwhile are expected. */
+let pairedQuietUntil = 0;
+const PAIRED_SWITCH_MS = 2500;
 
 function startQrPairing() {
   pairingSecret = newSecret();
@@ -1093,6 +1096,7 @@ function stopQrPairing() {
   const saved = loadSaved();
   settings = { ...settings, code: saved.code, host: saved.host, port: saved.port };
   if (saved.code) conn.restart();
+  else conn.stop(); // nothing to connect with until a code is typed
 }
 
 function onPaired(raw: unknown) {
@@ -1105,7 +1109,9 @@ function onPaired(raw: unknown) {
   settings = { ...settings, code, host: s.host, port: s.port };
   showPairing(false);
   toast('Paired with your phone');
-  conn.restart(); // the phone switches back to the real code in a moment
+  // The phone keeps the pairing certificate ~1.5 s more: connect after it switched.
+  pairedQuietUntil = performance.now() + PAIRED_SWITCH_MS + 8000;
+  setTimeout(() => conn.restart(), PAIRED_SWITCH_MS);
 }
 
 $('pair-manual').addEventListener('click', () => {

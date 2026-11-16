@@ -44,13 +44,24 @@ export class Connection {
   private ctrl: WritableStreamDefaultWriter<Uint8Array> | null = null;
   private wake: (() => void) | null = null;
   private authed = false;
+  /** Bumped by stop(): a loop from before a stop/start pair ends instead of running twice. */
+  private gen = 0;
 
   constructor(private hooks: ConnectionHooks) {}
 
   start() {
     if (this.running) return;
     this.running = true;
-    void this.loop();
+    void this.loop(++this.gen);
+  }
+
+  /** Stop connecting (e.g. no pairing code any more). start() resumes. */
+  stop() {
+    if (!this.running) return;
+    this.running = false;
+    this.gen++;
+    this.closeSession();
+    this.wake?.();
   }
 
   /** Drop the current session and reconnect now (e.g. settings changed). */
@@ -77,7 +88,8 @@ export class Connection {
     try { wt?.close(); } catch { /* already closed */ }
   }
 
-  private async loop() {
+  private async loop(gen: number) {
+    const live = () => this.running && gen === this.gen;
     // Retrying can't help: say so once instead of "WebTransport is not defined" forever.
     if (typeof WebTransport === 'undefined') {
       this.running = false;
@@ -85,7 +97,7 @@ export class Connection {
       return;
     }
     let backoff = BACKOFF_MIN_MS;
-    while (this.running) {
+    while (live()) {
       let wasConnected = false;
       let why = 'Disconnected';
       try {
@@ -95,7 +107,7 @@ export class Connection {
       } finally {
         this.closeSession();
       }
-      if (!this.running) break;
+      if (!live()) break;
       if (wasConnected) backoff = BACKOFF_MIN_MS;
       this.hooks.onStatus({ s: 'error', text: `${why} · retrying in ${backoff / 1000}s` });
       await this.sleep(backoff);
