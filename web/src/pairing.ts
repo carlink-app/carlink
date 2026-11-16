@@ -54,3 +54,24 @@ export function drawQr(canvas: HTMLCanvasElement, modules: boolean[][], cssSize:
 export function pairingView(hasCode: boolean, connected: boolean): 'qr' | 'paired' {
   return hasCode && connected ? 'paired' : 'qr';
 }
+
+/** Retry pace while the QR code is up (the phone accepts the secret once it scanned it). */
+const PAIRING_RETRY_MS = 1000;
+/** Retry pace right after pairing, while the phone switches to the real code. */
+const PAIRED_RETRY_MS = 300;
+/**
+ * Handshake limit while pairing: one started just as the phone switched codes
+ * goes unanswered (measured: ~5 s lost twice). A car on the hotspot answers in ms.
+ */
+const PAIRING_CONNECT_MS = 1500;
+
+/**
+ * Connection pace around pairing: fast retries and short handshakes while the
+ * QR code is up or until [quietUntil] after pairing; otherwise the normal
+ * backoff and handshake time (undefined).
+ */
+export function pairingPace(pairing: boolean, now: number, quietUntil: number): { retryMs?: number; connectTimeoutMs?: number } {
+  if (pairing) return { retryMs: PAIRING_RETRY_MS, connectTimeoutMs: PAIRING_CONNECT_MS };
+  if (now < quietUntil) return { retryMs: PAIRED_RETRY_MS, connectTimeoutMs: PAIRING_CONNECT_MS };
+  return { retryMs: undefined, connectTimeoutMs: undefined };
+}

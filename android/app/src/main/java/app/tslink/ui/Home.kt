@@ -5,6 +5,9 @@ enum class Primary { FINISH_SETUP, PAIR, DISCONNECT }
 
 enum class HomeColor { OK, WARN, MUTED }
 
+/** After a status: whether a Pair tap is still waiting for TSLink to run, and whether to open the scanner now. */
+data class ScanStep(val pending: Boolean, val open: Boolean)
+
 /** What the status card shows: [state] line, optional [hint] below it, the [primary] button. */
 data class HomeView(val state: String, val hint: String?, val primary: Primary, val color: HomeColor)
 
@@ -29,4 +32,23 @@ object Home {
             EngineStatus.Stopped, is EngineStatus.Message -> HomeView("Off", null, Primary.PAIR, HomeColor.MUTED)
         }
     }
+
+    /**
+     * Pair tapped while off waits for TSLink to run, then opens the scanner
+     * once. Stopped or any message (a refusal: Shizuku not running, permission
+     * denied, an error) drops it, so the scanner never opens unasked later.
+     */
+    fun scanAfter(pending: Boolean, status: EngineStatus): ScanStep = when {
+        !pending -> ScanStep(pending = false, open = false)
+        status is EngineStatus.Running -> ScanStep(pending = false, open = true)
+        status is EngineStatus.Busy -> ScanStep(pending = true, open = false)
+        else -> ScanStep(pending = false, open = false)
+    }
+
+    /**
+     * The note under the button (a refusal, "Paired with the car at ...")
+     * goes when TSLink comes up, not on every poll or car coming and going.
+     */
+    fun clearsNote(before: EngineStatus, now: EngineStatus) =
+        now is EngineStatus.Running && before !is EngineStatus.Running
 }

@@ -24,7 +24,13 @@ class EngineService : IEngine.Stub() {
     @Synchronized
     override fun start(code: String, port: Int, libPath: String, devAllow: String): String {
         if (!fromTSLink()) return "denied"
-        if (engine != null) return "already running"
+        engine?.let { running ->
+            if (code == this.code) return "already running"
+            // A new code (Unpair all cars while another link started TSLink):
+            // the old one must stop working now, not at the next restart.
+            running.stop(waitMs = 2_000)
+            engine = null
+        }
         // Shizuku started with root: Android refuses the car display to uid 0
         // with the shell's identity ("packageName must match the calling uid").
         if (android.os.Process.myUid() == 0) return ROOT_ERROR

@@ -188,6 +188,19 @@ object Setup {
     fun pageReady(page: SetupPage, steps: List<SetupStep>) =
         steps.filter { page(it.id) == page && !it.optional }.all { it.state == StepState.OK }
 
+    /** Setup opens on the first page that needs something (Optional when the rest is done). */
+    fun startPage(steps: List<SetupStep>): SetupPage =
+        SetupPage.entries.first { !pageReady(it, steps) || it == SetupPage.OPTIONAL }
+
+    /** Nothing works without Shizuku: that page can't be skipped; the others can. */
+    fun canLeave(page: SetupPage, steps: List<SetupStep>) = page != SetupPage.SHIZUKU || pageReady(page, steps)
+
+    fun nextLabel(page: SetupPage, ready: Boolean) = when {
+        page == SetupPage.OPTIONAL -> "Done"
+        page == SetupPage.PHONE && !ready -> "Skip for now"
+        else -> "Next"
+    }
+
     fun allRequiredReady(steps: List<SetupStep>) = steps.filterNot { it.optional }.all { it.state == StepState.OK }
 
     /** The state line under a step's title. */

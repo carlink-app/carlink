@@ -12,7 +12,7 @@ import { afterClose, groupApps, refreshRecents, resumeAction, withFront } from '
 import { accentFrom, textOn } from './theme';
 import { describe as describePhone, parsePhoneStatus } from './phonestatus';
 import { parseMedia, subtitle, type NowPlaying } from './media';
-import { drawQr, newSecret, pairedCode, pairingView, qrModules, qrText } from './pairing';
+import { drawQr, newSecret, pairedCode, pairingPace, pairingView, qrModules, qrText } from './pairing';
 import { errorText, helpFor } from './help';
 import { attachLongPress } from './longpress';
 import { addPin, isPinned, MAX_PINS, parsePins, PINS_KEY, removePin, unpinnedRecents } from './pins';
@@ -196,8 +196,8 @@ const conn = new Connection({
   onLost: (buf) => toWorker({ type: 'lost', buf }, [buf]),
   onRtt: (ms) => rtt.push(ms),
   // Pairing: the phone may switch any moment, so no growing backoff.
-  retryMs: () => pairingSecret ? PAIRING_RETRY_MS : performance.now() < pairedQuietUntil ? PAIRED_RETRY_MS : undefined,
-  connectTimeoutMs: () => pairingSecret || performance.now() < pairedQuietUntil ? PAIRING_CONNECT_MS : undefined,
+  retryMs: () => pace().retryMs,
+  connectTimeoutMs: () => pace().connectTimeoutMs,
 });
 
 function send(m: PageMsg) {
@@ -1106,16 +1106,9 @@ function renderDebug() {
 let pairingSecret: string | null = null;
 /** Just paired: the phone switches back to the real code; failed tries meanwhile are expected. */
 let pairedQuietUntil = 0;
-/** Retry pace while the QR code is up (the phone accepts the secret once it scanned it). */
-const PAIRING_RETRY_MS = 1000;
-/** Retry pace right after pairing, while the phone switches to the real code (~1 s). */
-const PAIRED_RETRY_MS = 300;
+/** Fast reconnects after pairing, while the phone switches to the real code. */
 const PAIRED_QUIET_MS = 8000;
-/**
- * Handshake limit while pairing: one started just as the phone switched codes
- * goes unanswered (measured: ~5 s lost twice). A car on the hotspot answers in ms.
- */
-const PAIRING_CONNECT_MS = 1500;
+const pace = () => pairingPace(!!pairingSecret, performance.now(), pairedQuietUntil);
 
 function startQrPairing() {
   pairingSecret = newSecret();

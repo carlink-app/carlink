@@ -64,7 +64,7 @@ class SetupActivity : Activity() {
         // Open where there's something to do (or where the user was before a rotation).
         val steps = Setup.steps(setupFacts())
         page = savedInstanceState?.getString("page")?.let(SetupPage::valueOf)
-            ?: SetupPage.entries.first { !Setup.pageReady(it, steps) || it == SetupPage.OPTIONAL }
+            ?: Setup.startPage(steps)
         Shizuku.addBinderReceivedListener(shizukuChanged)
         Shizuku.addBinderDeadListener(shizukuDead)
         Shizuku.addRequestPermissionResultListener(shizukuAnswered)
@@ -175,13 +175,8 @@ class SetupActivity : Activity() {
             v.tick.text = if (step.state == StepState.OK) "Not done" else "Mark done"
         }
         backButton.visibility = if (page == SetupPage.SHIZUKU) View.INVISIBLE else View.VISIBLE
-        nextButton.text = when {
-            page == SetupPage.OPTIONAL -> "Done"
-            page == SetupPage.PHONE && !ready -> "Skip for now"
-            else -> "Next"
-        }
-        // Nothing works without Shizuku: no skipping that page.
-        val canGo = page != SetupPage.SHIZUKU || ready
+        nextButton.text = Setup.nextLabel(page, ready)
+        val canGo = Setup.canLeave(page, steps)
         nextButton.isEnabled = canGo
         nextButton.alpha = if (canGo) 1f else 0.4f
         ui.stylePrimary(nextButton, primary = ready || page == SetupPage.OPTIONAL)

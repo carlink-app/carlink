@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { drawQr, newSecret, pairedCode, pairingView, QR_PREFIX, qrModules, qrText, SECRET_LENGTH } from './pairing';
+import { drawQr, newSecret, pairedCode, pairingPace, pairingView, QR_PREFIX, qrModules, qrText, SECRET_LENGTH } from './pairing';
 
 describe('pairing', () => {
   it('makes secrets from the code alphabet', () => {
@@ -87,5 +87,20 @@ describe('pairingView', () => {
   });
   it('keeps a live connection: paired view with Pair again', () => {
     expect(pairingView(true, true)).toBe('paired');
+  });
+});
+
+describe('pairingPace', () => {
+  it('while the QR code is up: retry every second, short handshakes', () => {
+    expect(pairingPace(true, 0, 0)).toEqual({ retryMs: 1000, connectTimeoutMs: 1500 });
+  });
+  it('right after pairing: fast retries until the quiet period ends', () => {
+    expect(pairingPace(false, 100, 8100)).toEqual({ retryMs: 300, connectTimeoutMs: 1500 });
+  });
+  it('afterwards: normal backoff and the full handshake time (a slow hotspot)', () => {
+    expect(pairingPace(false, 8100, 8100)).toEqual({ retryMs: undefined, connectTimeoutMs: undefined });
+  });
+  it('a QR code shown again wins over the quiet period', () => {
+    expect(pairingPace(true, 100, 8100)).toEqual({ retryMs: 1000, connectTimeoutMs: 1500 });
   });
 });

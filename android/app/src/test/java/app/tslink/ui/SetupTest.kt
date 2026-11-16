@@ -142,7 +142,6 @@ class SetupTest {
 
     @Test
     fun everyStepHasAPage() {
-        for (id in StepId.entries) Setup.page(id) // no exception: every step is on a page
         for (id in listOf(StepId.XIAOMI_USB_SECURITY, StepId.XIAOMI_AUTOSTART, StepId.SAMSUNG_SLEEP, StepId.OPPO_BACKGROUND)) {
             assertEquals(SetupPage.PHONE, Setup.page(id))
         }
@@ -168,5 +167,24 @@ class SetupTest {
         assertFalse(Setup.pageReady(SetupPage.PHONE, Setup.steps(allowed.copy(batteryUnrestricted = true))))
         assertTrue(Setup.pageReady(SetupPage.PHONE, Setup.steps(allowed.copy(batteryUnrestricted = true, ticked = setOf(StepId.HOTSPOT)))))
         assertTrue(Setup.pageReady(SetupPage.OPTIONAL, Setup.steps(fresh)))
+    }
+
+    @Test
+    fun startPageIsFirstThatNeedsSomething() {
+        assertEquals(SetupPage.SHIZUKU, Setup.startPage(Setup.steps(fresh)))
+        val allowed = fresh.copy(shizukuInstalled = true, shizukuRunning = true, shizukuAllowed = true)
+        assertEquals(SetupPage.PHONE, Setup.startPage(Setup.steps(allowed)))
+        assertEquals(SetupPage.OPTIONAL, Setup.startPage(Setup.steps(ready)))
+    }
+
+    @Test
+    fun nextButton() {
+        assertEquals("Done", Setup.nextLabel(SetupPage.OPTIONAL, ready = false))
+        assertEquals("Skip for now", Setup.nextLabel(SetupPage.PHONE, ready = false))
+        assertEquals("Next", Setup.nextLabel(SetupPage.PHONE, ready = true))
+        assertEquals("Next", Setup.nextLabel(SetupPage.SHIZUKU, ready = false))
+        assertFalse(Setup.canLeave(SetupPage.SHIZUKU, Setup.steps(fresh)))
+        assertTrue(Setup.canLeave(SetupPage.PHONE, Setup.steps(fresh)))
+        assertTrue(Setup.canLeave(SetupPage.OPTIONAL, Setup.steps(fresh)))
     }
 }

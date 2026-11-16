@@ -112,7 +112,12 @@ class Engine(
         private set
 
     init {
-        core.set(NativeCore.nativeStart(port, code, allow, this))
+        try {
+            core.set(NativeCore.nativeStart(port, code, allow, this))
+        } catch (t: Throwable) {
+            thread.quit() // a failed bind (port in use, retried) must not leave the thread behind
+            throw t
+        }
         post {
             phonePower.restoreAfterCrash()
         }
@@ -234,15 +239,16 @@ class Engine(
         status = if (connected) "car connected ($remote)" else "waiting for car"
         iconGeneration++ // icon batches of an earlier session are dropped
         if (handover != null) {
-            // Pairing: the car proved it saw the QR code; hand over the real code.
-            if (connected && !handedOver) {
-                handedOver = true
-                send(JSONObject().put("t", "paired").put("code", handover))
-                Log.i(TAG, "pairing: code sent to $remote")
-                onPaired?.invoke(remote)
-            } else if (!connected && handedOver) {
-                // Not before the code went out: a reloading car page must not end pairing.
-                onCarLeft?.invoke()
+            when (handoverAction(connected, handedOver)) {
+                // The car proved it saw the QR code; hand over the real code.
+                Handover.SEND_CODE -> {
+                    handedOver = true
+                    send(JSONObject().put("t", "paired").put("code", handover))
+                    Log.i(TAG, "pairing: code sent to $remote")
+                    onPaired?.invoke(remote)
+                }
+                Handover.CAR_LEFT -> onCarLeft?.invoke()
+                Handover.NONE -> Unit
             }
             return@post
         }
@@ -462,4 +468,17 @@ class Engine(
         }
         if (waitMs > 0) done.await(waitMs, TimeUnit.MILLISECONDS)
     }
+}
+
+enum class Handover { SEND_CODE, CAR_LEFT, NONE }
+
+/**
+ * Pairing mode, on a car session going [connected] or away: the first car in
+ * gets the code; once it has it ([handedOver]) and leaves, pairing ends. A
+ * page reloading before that doesn't end it, and nobody after gets the code.
+ */
+internal fun handoverAction(connected: Boolean, handedOver: Boolean): Handover = when {
+    connected && !handedOver -> Handover.SEND_CODE
+    !connected && handedOver -> Handover.CAR_LEFT
+    else -> Handover.NONE
 }

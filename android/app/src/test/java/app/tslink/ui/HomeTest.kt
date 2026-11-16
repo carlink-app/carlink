@@ -58,4 +58,37 @@ class HomeTest {
         }
         for (v in all) assertFalse(v.toString(), "engine" in (v.state + v.hint).lowercase())
     }
+
+    @Test fun checkingShowsChecking() {
+        assertEquals("Checking...", Home.view(true, EngineStatus.parse("checking...")).state)
+    }
+
+    @Test fun pendingScanOpensOnceRunning() {
+        assertEquals(ScanStep(pending = false, open = true), Home.scanAfter(true, EngineStatus.parse("waiting for car · cert ab")))
+    }
+
+    @Test fun pendingScanWaitsWhileStarting() {
+        assertEquals(ScanStep(pending = true, open = false), Home.scanAfter(true, EngineStatus.parse("starting...")))
+    }
+
+    @Test fun pendingScanDropsWhenStoppedOrRefused() {
+        for (reply in listOf("stopped", "error: x", "Shizuku permission denied", "Shizuku isn't running. Open Shizuku and start it.")) {
+            assertEquals(reply, ScanStep(pending = false, open = false), Home.scanAfter(true, EngineStatus.parse(reply)))
+        }
+    }
+
+    @Test fun noScanWithoutAsking() {
+        assertEquals(ScanStep(pending = false, open = false), Home.scanAfter(false, EngineStatus.parse("waiting for car · cert ab")))
+    }
+
+    @Test fun noteStaysUntilTSLinkComesUp() {
+        val waiting = EngineStatus.parse("waiting for car · cert ab")
+        val connected = EngineStatus.parse("car connected (9.9.0.2) · cert ab")
+        assertEquals(true, Home.clearsNote(EngineStatus.Stopped, waiting))
+        assertEquals(true, Home.clearsNote(EngineStatus.Busy("Starting..."), waiting))
+        // Polls and the car coming and going keep "Paired with the car at ..." up.
+        assertEquals(false, Home.clearsNote(waiting, connected))
+        assertEquals(false, Home.clearsNote(waiting, waiting))
+        assertEquals(false, Home.clearsNote(waiting, EngineStatus.Stopped))
+    }
 }

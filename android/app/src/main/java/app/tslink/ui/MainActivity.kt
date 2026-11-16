@@ -13,6 +13,7 @@ import android.graphics.Typeface
 import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
+import android.os.SystemClock
 import android.provider.Settings
 import android.view.Gravity
 import android.view.View
@@ -70,6 +71,8 @@ class MainActivity : Activity() {
     private val engineRunning get() = lastStatus is EngineStatus.Running
     /** Pair was tapped while TSLink was off: open the scanner once it runs. */
     private var pendingScan = false
+    /** Until then (uptime ms) pairing is swapping engines: no status polls. */
+    private var pairingUntil = 0L
 
     private lateinit var carName: TextView
     private lateinit var carView: TextView
@@ -146,7 +149,10 @@ class MainActivity : Activity() {
     /** The engine doesn't push its state: while the screen is up, read it every couple of seconds (a car connecting). */
     private val refresher = object : Runnable {
         override fun run() {
-            if (engine != null) call { it.status() }
+            // Not while a Pair tap starts TSLink or pairing swaps engines: an in-between
+            // "stopped" would drop the scan or flash Off/Disconnect (they refresh themselves).
+            if (engine != null && !pendingScan && SystemClock.uptimeMillis() > pairingUntil) call { it.status() }
+            render() // setup may change meanwhile (Shizuku stopped)
             window.decorView.postDelayed(this, STATUS_POLL_MS)
         }
     }
@@ -322,6 +328,7 @@ class MainActivity : Activity() {
                 call(onResult = { r ->
                     if (r != "pairing") return@call showMessage(r)
                     showMessage("Pairing: the car connects in a few seconds. Keep the car page open.")
+                    pairingUntil = SystemClock.uptimeMillis() + PAIRING_POLLS * 1_000L
                     watchPairing(PAIRING_POLLS)
                 }) { it.startPairing(secret) }
             }
@@ -336,7 +343,10 @@ class MainActivity : Activity() {
         if (left <= 0 || isDestroyed) return
         call(onResult = { r ->
             // The engine restarted with the real code: refresh the state line once it's back.
-            if (r != "waiting") window.decorView.postDelayed({ call { it.status() } }, ENGINE_SWAP_MS)
+            if (r != "waiting") {
+                pairingUntil = SystemClock.uptimeMillis() + ENGINE_SWAP_MS
+                window.decorView.postDelayed({ call { it.status() } }, ENGINE_SWAP_MS)
+            }
             when {
                 r.startsWith("paired ") -> showMessage(
                     "Paired with the car at ${r.removePrefix("paired ").substringBefore(':')}. " +
@@ -406,27 +416,24 @@ class MainActivity : Activity() {
      * redraw the status card; anything else is shown as a message under its button.
      */
     private fun setStatus(s: String) = runOnUiThread {
-        when (val st = EngineStatus.parse(s)) {
+        val st = EngineStatus.parse(s)
+        val scan = Home.scanAfter(pendingScan, st)
+        pendingScan = scan.pending
+        when (st) {
             is EngineStatus.Message -> {
                 showMessage(st.text)
-                // A failed start/check must not leave "Starting..." up, nor a scan waiting for it.
-                if (EngineStatus.isError(s)) {
-                    pendingScan = false
-                    lastStatus = EngineStatus.Stopped
-                }
+                // A failed start/check must not leave "Starting..." up.
+                if (EngineStatus.isError(s)) lastStatus = EngineStatus.Stopped
             }
             else -> {
-                // Polled every few seconds: only a change clears the note under the button.
-                if (st is EngineStatus.Running && st != lastStatus) showMessage(null)
+                if (Home.clearsNote(lastStatus, st)) showMessage(null)
                 lastStatus = st
-                if (st == EngineStatus.Stopped) pendingScan = false
+                // Off: the car hotspot may be off too (the car left, Disconnect).
+                if (st == EngineStatus.Stopped) carHotspotOn = false
             }
         }
         render()
-        if (pendingScan && engineRunning) {
-            pendingScan = false
-            openScanner()
-        }
+        if (scan.open) openScanner()
     }
 
     /** Draw the status card and the Start/Stop button from [lastStatus] and the setup state. */

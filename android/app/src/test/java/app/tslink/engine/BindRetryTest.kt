@@ -38,4 +38,24 @@ class BindRetryTest {
         }
         assertEquals(1, tries)
     }
+
+    @Test
+    fun theCoreErrorTextCountsAsInUse() {
+        // What lib.rs throws: the anyhow chain of the endpoint bind.
+        var tries = 0
+        retryWhileInUse(tries = 3, waitMs = 1, sleep = {}) {
+            if (++tries < 2) throw IOException("bind 0.0.0.0:4433: Address already in use (os error 98)")
+        }
+        assertEquals(2, tries)
+    }
+
+    @Test
+    fun handover() {
+        assertEquals(Handover.SEND_CODE, handoverAction(connected = true, handedOver = false))
+        assertEquals(Handover.CAR_LEFT, handoverAction(connected = false, handedOver = true))
+        // A car page reloading before the code went out must not end pairing.
+        assertEquals(Handover.NONE, handoverAction(connected = false, handedOver = false))
+        // A second device connecting afterwards never gets the code.
+        assertEquals(Handover.NONE, handoverAction(connected = true, handedOver = true))
+    }
 }
