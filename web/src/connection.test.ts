@@ -39,20 +39,32 @@ describe('Connection retry pacing', () => {
     };
   }
 
-  function hooks(retryMs?: () => number | undefined): ConnectionHooks {
+  /** A WebTransport whose handshake never finishes (the phone was switching): only a timeout ends it. */
+  function hangingTransport(attempts: number[]) {
+    return class {
+      ready = new Promise<void>(() => { /* no answer */ });
+      closed = new Promise<never>(() => { /* never */ });
+      constructor() { attempts.push(Date.now()); }
+      close() { /* nothing open */ }
+    };
+  }
+
+  function hooks(retryMs?: () => number | undefined, connectTimeoutMs?: () => number | undefined): ConnectionHooks {
     return {
       settings: () => ({ code: 'ABCD-EFGH-JKLM', host: '9.9.0.1', port: 4433 }),
       layout: () => [],
       codecs: async () => ['h264'],
       onStatus: vi.fn(), onMessage: vi.fn(), onSession: vi.fn(), onFrame: vi.fn(), onLost: vi.fn(), onRtt: vi.fn(),
       retryMs,
+      connectTimeoutMs,
     };
   }
 
-  async function attemptGaps(h: ConnectionHooks, ms: number) {
+  async function attemptGaps(h: ConnectionHooks, ms: number, transport = failingTransport) {
     const attempts: number[] = [];
     vi.useFakeTimers();
-    vi.stubGlobal('WebTransport', failingTransport(attempts));
+    vi.stubGlobal('WebTransport', transport(attempts));
+    vi.stubGlobal('window', globalThis); // withTimeout uses window.setTimeout
     try {
       const c = new Connection(h);
       c.start();
@@ -71,5 +83,13 @@ describe('Connection retry pacing', () => {
 
   it('retryMs undefined uses backoff', async () => {
     expect(await attemptGaps(hooks(() => undefined), 7500)).toEqual([1000, 2000, 4000]);
+  });
+
+  it('connectTimeoutMs gives up on an unanswered handshake sooner', async () => {
+    expect(await attemptGaps(hooks(() => 300, () => 1500), 5500, hangingTransport)).toEqual([1800, 1800, 1800]);
+  });
+
+  it('without connectTimeoutMs an unanswered handshake waits the full 8 s', async () => {
+    expect(await attemptGaps(hooks(() => 300), 9000, hangingTransport)).toEqual([8300]);
   });
 });

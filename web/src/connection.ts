@@ -26,6 +26,12 @@ export interface ConnectionHooks {
   onRtt(ms: number): void;
   /** A fixed wait before the next try (QR pairing: the phone switches any moment), or undefined for the backoff. */
   retryMs?(): number | undefined;
+  /**
+   * How long to wait for the handshake, or undefined for the default 8 s.
+   * While the phone switches codes a handshake can go unanswered; giving up
+   * soon and trying again beats waiting out QUIC's retransmissions.
+   */
+  connectTimeoutMs?(): number | undefined;
 }
 
 const PING_MS = 20;
@@ -145,7 +151,8 @@ export class Connection {
     );
     closed.catch(() => { /* raced below */ });
 
-    await withTimeout(Promise.race([wt.ready, closed]), READY_TIMEOUT_MS, 'Timed out (phone unreachable?)');
+    const readyMs = this.hooks.connectTimeoutMs?.() ?? READY_TIMEOUT_MS;
+    await withTimeout(Promise.race([wt.ready, closed]), readyMs, 'Timed out (phone unreachable?)');
     if (!live()) return;
 
     // Control stream: the phone speaks first (challenge).

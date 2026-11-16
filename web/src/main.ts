@@ -197,6 +197,7 @@ const conn = new Connection({
   onRtt: (ms) => rtt.push(ms),
   // Pairing: the phone may switch any moment, so no growing backoff.
   retryMs: () => pairingSecret ? PAIRING_RETRY_MS : performance.now() < pairedQuietUntil ? PAIRED_RETRY_MS : undefined,
+  connectTimeoutMs: () => pairingSecret || performance.now() < pairedQuietUntil ? PAIRING_CONNECT_MS : undefined,
 });
 
 function send(m: PageMsg) {
@@ -1110,6 +1111,11 @@ const PAIRING_RETRY_MS = 1000;
 /** Retry pace right after pairing, while the phone switches to the real code (~1 s). */
 const PAIRED_RETRY_MS = 300;
 const PAIRED_QUIET_MS = 8000;
+/**
+ * Handshake limit while pairing: one started just as the phone switched codes
+ * goes unanswered (measured: ~5 s lost twice). A car on the hotspot answers in ms.
+ */
+const PAIRING_CONNECT_MS = 1500;
 
 function startQrPairing() {
   pairingSecret = newSecret();

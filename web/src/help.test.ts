@@ -41,10 +41,10 @@ describe('helpFor', () => {
     expect(h.retry).toBe(false);
   });
 
-  it('the unreachable help names the hotspot and Start engine', () => {
+  it('the unreachable help names the hotspot and the phone Ready status', () => {
     const h = helpFor({ s: 'error', text: 'Timed out (phone unreachable?) · retrying in 1s' }, null)!;
     expect(h.steps.join(' ')).toMatch(/hotspot/);
-    expect(h.steps.join(' ')).toMatch(/Start engine/);
+    expect(h.steps.join(' ')).toMatch(/should say Ready/);
   });
 
   it('connecting: generic help at first, the last error\'s help between retries', () => {

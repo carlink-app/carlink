@@ -14,7 +14,7 @@ export interface Help {
 }
 
 const HOTSPOT = 'Is the car connected to your phone\'s hotspot (Wi-Fi)?';
-const RUNNING = 'Is TSLink running on the phone? Open it and tap Start engine.';
+const RUNNING = 'Is TSLink on? Open it on the phone: the status should say Ready.';
 const CODE_AGAIN = 'Pairing code changed? Tap Pairing and scan the QR code with TSLink, or type the new code.';
 const ADDRESS = 'Still nothing? Check the phone address in Pairing.';
 
