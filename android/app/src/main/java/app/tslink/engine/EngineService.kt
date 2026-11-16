@@ -126,15 +126,6 @@ class EngineService : IEngine.Stub() {
         "error: $t"
     }
 
-    override fun notificationAccess(on: Boolean): String {
-        if (!fromTSLink()) return "denied"
-        val component = "$APP_PACKAGE/$APP_PACKAGE.notify.Listener"
-        val p = ProcessBuilder("cmd", "notification", if (on) "allow_listener" else "disallow_listener", component)
-            .redirectErrorStream(true).start()
-        val out = p.inputStream.bufferedReader().readText().trim()
-        return if (p.waitFor() == 0 && out.isEmpty()) (if (on) "car notifications on" else "car notifications off") else "error: $out"
-    }
-
     override fun openNotification(intent: PendingIntent?, pkg: String, displayId: Int) {
         if (fromTSLink()) engine?.openNotification(intent, pkg, displayId)
     }

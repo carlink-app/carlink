@@ -27,6 +27,7 @@ object SelfTest {
             .put("soc", if (Build.VERSION.SDK_INT >= 31) "${Build.SOC_MANUFACTURER} ${Build.SOC_MODEL}" else Build.HARDWARE)
             .put("cores", Runtime.getRuntime().availableProcessors())
         val encoders = Codecs.encoders()
+        out.put("capabilities", Capabilities.probe())
         out.put("encoders", JSONArray(encoders.map { "${it.name}${if (it.hardware) "" else " (software)"}: ${it.types.joinToString(",") { t -> t.removePrefix("video/") }}" }))
         val runs = JSONArray()
         for (codec in listOf("hevc", "h264")) {

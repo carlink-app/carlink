@@ -16,8 +16,12 @@ import java.io.File
 /**
  * Some phones (Pixel, Android 17) don't give our virtual display its own
  * power group: when the phone sleeps, the car display dozes with it (frozen
- * picture, touch and keyboard ignored). While a car session runs, this keeps
- * the phone awake but with its own panel switched off ("dark"):
+ * picture, touch and keyboard ignored). While a car session runs:
+ *
+ * - phone unlocked and lit (on the charging pad, or in use): it just stays on
+ *   (a dim screen wake lock), nothing else;
+ *
+ * otherwise it keeps the phone awake but with its own panel switched off ("dark"):
  *
  * - phone would sleep (screen timeout or power button while lit), or has been
  *   lit for the screen timeout (car touches count as phone activity, so the
@@ -43,6 +47,8 @@ class PhonePower(private val handler: Handler) {
     private var ticks = 0
     private var litSince = 0L
     private var wakeFailures = 0
+    /** Holding [lock] for an unlocked, lit phone (not dark). */
+    private var keptOn = false
 
     private val poll = object : Runnable {
         override fun run() {
@@ -59,7 +65,10 @@ class PhonePower(private val handler: Handler) {
             val interactive = pm.isInteractive
             if (interactive && dark) ticks++
             val litFor = if (interactive && !dark) SystemClock.uptimeMillis() - litSince else 0L
-            when (pollStep(interactive, dark, ticks, litFor, screenTimeoutMs())) {
+            // Unlocked and lit (on the charging pad): just keep it on, no tricks.
+            val unlocked = interactive && !dark && keyguardLocked() == false
+            if (unlocked != keptOn) keepOn(unlocked)
+            when (pollStep(interactive, dark, ticks, litFor, screenTimeoutMs(), unlocked)) {
                 Step.LIGHTEN -> lighten()
                 Step.DARKEN -> darken()
                 Step.REAPPLY -> panel(OFF) // the system may switch the panel back on (e.g. a wake-up event)
@@ -85,6 +94,7 @@ class PhonePower(private val handler: Handler) {
         active = false
         handler.removeCallbacks(poll)
         handler.removeCallbacks(reapply)
+        if (keptOn) keepOn(false)
         if (dark) {
             dark = false
             panel(NORMAL)
@@ -93,7 +103,19 @@ class PhonePower(private val handler: Handler) {
         }
     }
 
+    /**
+     * Phone unlocked and lit: hold a dim screen lock so it doesn't time out
+     * (the car display would doze with it). The user is using it or it sits on
+     * the pad; the panel tricks are only for a phone that goes to sleep.
+     */
+    private fun keepOn(on: Boolean) {
+        keptOn = on
+        if (on) lock.acquire() else if (!dark) lock.release()
+        Log.i(TAG, if (on) "phone unlocked: keeping it on while the car is connected" else "phone locked again: normal screen timeout")
+    }
+
     private fun darken() {
+        if (keptOn) keptOn = false // the dark state holds the lock from here
         lockNow()
         if (!wake()) {
             // Without waking, dark/lit would flap every poll and the car stays dozing.
@@ -243,15 +265,24 @@ class PhonePower(private val handler: Handler) {
         /**
          * What one poll does.
          * - Asleep: a timeout or the power button, so lit -> dark and dark -> lit.
-         * - Awake and lit for the screen timeout ([litFor] >= [timeout]): dark.
+         * - Awake, locked and lit for the screen timeout ([litFor] >= [timeout]): dark.
+         *   Unlocked: stays lit.
          *   Car touches keep the phone's own timeout from firing.
          * - Awake and dark: re-assert "off" every [REAPPLY_TICKS]th poll
          *   ([tick] counts awake-and-dark polls).
          */
-        fun pollStep(interactive: Boolean, dark: Boolean, tick: Int, litFor: Long = 0, timeout: Long = Long.MAX_VALUE): Step = when {
+        fun pollStep(
+            interactive: Boolean,
+            dark: Boolean,
+            tick: Int,
+            litFor: Long = 0,
+            timeout: Long = Long.MAX_VALUE,
+            unlocked: Boolean = false,
+        ): Step = when {
             !interactive -> if (dark) Step.LIGHTEN else Step.DARKEN
             dark -> if (tick % REAPPLY_TICKS == 0) Step.REAPPLY else Step.NONE
-            litFor >= timeout -> Step.DARKEN
+            // Unlocked (on the pad, or in use): stays lit, never forced dark.
+            litFor >= timeout && !unlocked -> Step.DARKEN
             else -> Step.NONE
         }
 

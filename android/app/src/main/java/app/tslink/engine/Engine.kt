@@ -95,7 +95,6 @@ class Engine(
         core.set(NativeCore.nativeStart(port, code, allow, this))
         post {
             phonePower.restoreAfterCrash()
-            CameraBlock.restore() // undo the camera block of a test build, if one is left
         }
     }
 

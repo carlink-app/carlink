@@ -224,13 +224,19 @@ class Pane(
 
     /**
      * Show the on-screen keyboard on the car display, not the phone (as
-     * scrcpy's --display-ime-policy=local). Hidden API, Android 11+.
+     * scrcpy's --display-ime-policy=local). Hidden API.
      */
     private fun keyboardOnCar(displayId: Int) {
         try {
             val wm = Shell.service("window", "android.view.IWindowManager")!!
-            wm.javaClass.getMethod("setDisplayImePolicy", Int::class.javaPrimitiveType, Int::class.javaPrimitiveType)
-                .invoke(wm, displayId, 0 /* WindowManager.DISPLAY_IME_POLICY_LOCAL */)
+            if (Build.VERSION.SDK_INT >= 31) {
+                wm.javaClass.getMethod("setDisplayImePolicy", Int::class.javaPrimitiveType, Int::class.javaPrimitiveType)
+                    .invoke(wm, displayId, 0 /* WindowManager.DISPLAY_IME_POLICY_LOCAL */)
+            } else {
+                // Android 10-11: the older form of the same setting.
+                wm.javaClass.getMethod("setShouldShowIme", Int::class.javaPrimitiveType, Boolean::class.javaPrimitiveType)
+                    .invoke(wm, displayId, true)
+            }
         } catch (e: Exception) {
             Log.w(TAG, "keyboard stays on the phone: ${Shell.cause(e)}")
         }

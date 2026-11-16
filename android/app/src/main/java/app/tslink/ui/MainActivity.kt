@@ -405,22 +405,19 @@ class MainActivity : Activity() {
     }
 
     /**
-     * Notification access is only ever changed here, by the user. Through the
-     * engine (shell) it's one tap; without it, the system settings page.
+     * Notification access is the user's to give: Android's own page for it
+     * (the app never grants it to itself).
      */
     private fun toggleNotifications() {
-        val want = !notificationsOn()
-        if (engine == null) {
+        notifSwitch.isChecked = notificationsOn() // the page decides, not the tap
+        try {
             startActivity(
                 Intent(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS)
                     .putExtra(Settings.EXTRA_NOTIFICATION_LISTENER_COMPONENT_NAME, listener.flattenToString()),
             )
-            return
+        } catch (e: android.content.ActivityNotFoundException) {
+            startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
         }
-        call(onResult = { r ->
-            showNotifications()
-            if (EngineStatus.isError(r)) showMessage(r)
-        }) { e -> e.notificationAccess(want) }
     }
 
     // ---- Diagnostics --------------------------------------------------------

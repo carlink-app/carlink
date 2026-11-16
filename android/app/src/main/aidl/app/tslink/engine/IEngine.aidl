@@ -23,8 +23,7 @@ interface IEngine {
 
     String hotspotOff() = 7;
 
-    // User's explicit choice in the app: grant/revoke tslink's notification access.
-    String notificationAccess(boolean on) = 8;
+    // 8 was notificationAccess (the engine granted itself notification access): removed, the user grants it.
 
     // Open a notification's content intent on a display. Sent from here (shell
     // may start activities from the background; the app's listener may not).

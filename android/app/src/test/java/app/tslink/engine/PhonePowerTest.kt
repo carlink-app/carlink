@@ -48,4 +48,12 @@ class PhonePowerTest {
         // Dark is never re-darkened by the lit timer.
         assertEquals(Step.NONE, pollStep(interactive = true, dark = true, tick = 1, litFor = 99_999, timeout = 30_000))
     }
+
+    @Test fun unlockedStaysLitPastTheTimeout() {
+        assertEquals(Step.NONE, pollStep(interactive = true, dark = false, tick = 0, litFor = 60_000, timeout = 30_000, unlocked = true))
+        assertEquals(Step.DARKEN, pollStep(interactive = true, dark = false, tick = 0, litFor = 60_000, timeout = 30_000, unlocked = false))
+    }
+
+    @Test fun unlockedButAsleepStillGoesDark() =
+        assertEquals(Step.DARKEN, pollStep(interactive = false, dark = false, tick = 0, unlocked = true))
 }

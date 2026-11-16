@@ -16,7 +16,7 @@ import kotlin.concurrent.thread
 /**
  * Forwards phone notifications worth a glance to the car, and supplies app
  * icons (the engine's shell process can't render adaptive icons). Notification
- * access is granted by the engine (`cmd notification allow_listener`).
+ * access is granted by the user in Android's settings.
  */
 class Listener : NotificationListenerService() {
     companion object {
