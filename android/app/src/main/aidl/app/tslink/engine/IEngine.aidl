@@ -32,4 +32,7 @@ interface IEngine {
 
     // Recent engine log lines (logcat, tslink tags), for the app's log screen.
     String logs() = 10;
+
+    // Pair a car from the one-time secret in its QR code (see EngineService).
+    String startPairing(String secret) = 11;
 }

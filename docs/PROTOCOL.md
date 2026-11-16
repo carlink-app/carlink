@@ -212,3 +212,19 @@ Certificate ::= SEQUENCE {
 overlay): the first 6 lowercase hex chars of this week's hash (current UTC
 time). Test vector above -> `2fdf65`. A mismatch means a different code or a
 different week (clock off).
+
+## Pairing with a QR code
+
+1. The car page makes a one-time secret (20 characters from the pairing-code
+   alphabet, 100 bits) and shows `TSLINK-PAIR:<secret>` as a QR code.
+2. The phone app scans it and calls `IEngine.startPairing(secret)`: for up to
+   2 minutes the engine runs with the secret in place of the pairing code (same
+   certificate derivation and challenge/response, so the car must have seen
+   the QR code to connect).
+3. The page keeps connecting with the secret. The first authenticated session
+   gets `{"t":"paired","code":"ABCD-EFGH-JKLM"}` and nothing else is served.
+4. The page stores the code and the address it connected to; the engine goes
+   back to the normal code about 1.5 s later and the page reconnects with it.
+
+Typing the code on the page stays available ("Type the code instead").
+

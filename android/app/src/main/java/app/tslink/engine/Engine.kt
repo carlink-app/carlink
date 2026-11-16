@@ -21,7 +21,20 @@ import java.util.concurrent.atomic.AtomicLong
  * native core is posted to one thread, so all state is touched by it only.
  * Messages only arrive after the car authenticated (see core/src/server.rs).
  */
-class Engine(private val code: String, port: Int, allow: String) : NativeCore.Listener {
+/**
+ * [handover]: pairing mode. [code] is then the one-time secret from the car
+ * page's QR code, and the first car that authenticates with it gets the real
+ * pairing code ([handover]) in a `paired` message; nothing else is served.
+ */
+class Engine(
+    private val code: String,
+    port: Int,
+    allow: String,
+    private val handover: String? = null,
+) : NativeCore.Listener {
+    /** Pairing mode: called once the real code went to the car. */
+    @Volatile var onPaired: (() -> Unit)? = null
+    private var handedOver = false
     companion object {
         const val MAX_PANES = 4
         private val SIZE = 320..4096
@@ -195,6 +208,16 @@ class Engine(private val code: String, port: Int, allow: String) : NativeCore.Li
         if (!connected) handler.postDelayed(releaseIdlePanes, PANE_GRACE_MS)
         status = if (connected) "car connected ($remote)" else "waiting for car"
         iconGeneration++ // icon batches of an earlier session are dropped
+        if (handover != null) {
+            // Pairing: the car proved it saw the QR code; hand over the real code.
+            if (connected && !handedOver) {
+                handedOver = true
+                send(JSONObject().put("t", "paired").put("code", handover))
+                Log.i(TAG, "pairing: code sent to $remote")
+                onPaired?.invoke()
+            }
+            return@post
+        }
         reportSession(connected)
     }
 
@@ -230,6 +253,7 @@ class Engine(private val code: String, port: Int, allow: String) : NativeCore.Li
     private fun error(msg: String) = send(JSONObject().put("t", "error").put("msg", msg))
 
     private fun handle(m: JSONObject) {
+        if (handover != null) return // pairing mode serves nothing but the code
         when (m.getString("t")) {
             "hello" -> {
                 val codecs = m.optJSONArray("codecs")

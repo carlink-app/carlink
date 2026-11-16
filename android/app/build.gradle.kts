@@ -44,6 +44,8 @@ kotlin { jvmToolchain(17) }
 dependencies {
     implementation("dev.rikka.shizuku:api:13.1.5")
     implementation("dev.rikka.shizuku:provider:13.1.5")
+    // QR scanning for pairing (Google's scanner UI: no camera permission for the app).
+    implementation("com.google.android.gms:play-services-code-scanner:16.1.0")
     testImplementation("junit:junit:4.13.2")
     // Android's org.json is a stub in local unit tests.
     testImplementation("org.json:json:20260814")

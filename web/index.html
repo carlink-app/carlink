@@ -51,21 +51,34 @@
   </div>
 
   <div id="pairing" hidden>
+    <section id="pair-qr" hidden aria-labelledby="pair-qr-h">
+      <h1 id="pair-qr-h">Pair with your phone</h1>
+      <p>On your phone, open TSLink and tap <strong>Pair a car (scan QR)</strong>, then scan this code.</p>
+      <canvas id="pair-qr-canvas" aria-label="Pairing QR code"></canvas>
+      <p id="pair-qr-status" class="pair-status">Waiting for your phone…</p>
+      <div class="row buttons">
+        <button type="button" id="pair-qr-cancel" class="secondary">Close</button>
+        <button type="button" id="pair-manual" class="secondary">Type the code instead</button>
+      </div>
+    </section>
     <form id="pairing-form" autocomplete="off">
       <h1>Pair with your phone</h1>
-      <p>Open TSLink on your phone and enter the pairing code it shows.</p>
+      <p>Enter the pairing code shown in TSLink on your phone, or <button type="button" id="pair-scan" class="link">pair with a QR code</button>.</p>
       <label>Pairing code
         <input id="f-code" name="code" placeholder="ABCD-EFGH-JKLM" autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false" maxlength="20" aria-describedby="f-code-hint" required>
         <span id="f-code-hint" class="field-hint"></span>
       </label>
-      <div class="row">
-        <label class="grow">Phone address
-          <input id="f-host" name="host" inputmode="decimal" spellcheck="false" required>
-        </label>
-        <label>Port
-          <input id="f-port" name="port" inputmode="numeric" pattern="[0-9]*" required>
-        </label>
-      </div>
+      <details id="f-advanced">
+        <summary>Advanced: phone address</summary>
+        <div class="row">
+          <label class="grow">Phone address
+            <input id="f-host" name="host" inputmode="decimal" spellcheck="false" required>
+          </label>
+          <label>Port
+            <input id="f-port" name="port" inputmode="numeric" pattern="[0-9]*" required>
+          </label>
+        </div>
+      </details>
       <p id="f-error" class="form-error"></p>
       <div class="row buttons">
         <button type="button" id="f-cancel" class="secondary">Close</button>

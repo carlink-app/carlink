@@ -63,6 +63,8 @@ export type PhoneMsg =
   | { t: 'pane'; id: number; w: number; h: number; codec: Codec }
   | { t: 'apps'; list: AppInfo[] }
   | { t: 'app-icons'; list: { pkg: string; ih: string; icon: string }[] }
+  /** QR pairing: the real pairing code, for the car that showed the QR code. */
+  | { t: 'paired'; code: string }
   | { t: 'launched'; pane: number; pkg: string }
   /** Phone's rate control: level in permille of the codec's max bitrate. */
   | { t: 'rate'; level: number; kbps: number }

@@ -2,6 +2,9 @@ package app.tslink.ui
 
 import android.Manifest
 import android.annotation.SuppressLint
+import com.google.mlkit.vision.barcode.common.Barcode
+import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
+import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
 import android.app.Activity
 import android.app.AlertDialog
 import android.app.NotificationManager
@@ -175,9 +178,26 @@ class MainActivity : Activity() {
         card.addView(LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            addView(ui.line("Enter it once on the car page. After a new code, enter it there again."), LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+            addView(ui.line("Or type it on the car page. After a new code, pair again."), LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
             addView(ui.textButton("New code") { newCode() })
         })
+        card.addView(ui.button("Pair a car (scan QR)", primary = true) { pairCar() }, fullWidth(top = 12))
+    }
+
+    /** Scan the QR code on the car page; the engine then hands the pairing code to that car. */
+    private fun pairCar() {
+        if (engine == null || !engineRunning) return showMessage("Start the engine first, then scan.")
+        val options = GmsBarcodeScannerOptions.Builder().setBarcodeFormats(Barcode.FORMAT_QR_CODE).build()
+        GmsBarcodeScanning.getClient(this, options).startScan()
+            .addOnSuccessListener { barcode ->
+                val secret = Pairing.secretFrom(barcode.rawValue)
+                    ?: return@addOnSuccessListener showMessage("That isn't a TSLink pairing code. Open tslink.app in the car.")
+                showMessage("Pairing...")
+                call(onResult = { r ->
+                    showMessage(if (r == "pairing") "Pairing: the car connects in a few seconds. Keep the car page open." else r)
+                }) { it.startPairing(secret) }
+            }
+            .addOnFailureListener { e -> showMessage("error: scanner unavailable (${e.message})") }
     }
 
     private fun connectionCard(parent: LinearLayout) {

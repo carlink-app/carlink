@@ -9,6 +9,7 @@ import { PANE_DPI, type AppInfo, type FromWorker, type PageMsg, type PaneLayout,
 import { formatCode, makeCert, weekStart } from './cert';
 import { ErrorWindow, fingerprint, LogRing, maskCode, resolveCode, shortUA, utcStamp } from './diag';
 import { afterClose, groupApps, refreshRecents } from './apps';
+import { drawQr, newSecret, pairedCode, qrModules, qrText } from './pairing';
 import { acceptIcons, applyCache, chunkByBytes, ICON_REQUEST_BYTES, loadIcons, MAX_CACHED, saveIcons, validIcon, type CachedIcon } from './iconcache';
 import {
   addBanner, addToTray, callsFirst, nextExpiry, pruneExpired, removeBanner, removeFromTray, sanitizeNotif, trayBadge, trayOthers, validId,
@@ -221,6 +222,7 @@ function onMessage(m: PhoneMsg) {
     }
     case 'apps': void onApps(Array.isArray(m.list) ? m.list : []); break;
     case 'app-icons': if (Array.isArray(m.list)) onIcons(m.list); break;
+    case 'paired': onPaired(m.code); break;
     case 'rate': rateKbps = Number(m.kbps) || 0; break;
     case 'error': toast(`Phone: ${m.msg}`); break;
     case 'notif': {
@@ -481,6 +483,11 @@ worker.onmessage = (e: MessageEvent<FromWorker>) => {
 let statusTimer = 0;
 let lastStatus: Status = { s: 'idle', text: '' };
 function showStatus(st: Status) {
+  // While pairing, failed attempts are expected (the phone hasn't scanned yet).
+  if (pairingSecret && st.s !== 'connected') {
+    $('pair-qr-status').textContent = 'Waiting for your phone…';
+    return;
+  }
   // The retry countdown changes each time; without it, repeats collapse in the log.
   if (st.s === 'error') logLine(st.text.replace(/ · retrying in .*$/, ''));
   lastStatus = st;
@@ -808,6 +815,54 @@ function renderDebug() {
 
 // ---------- pairing / settings ----------
 
+// ---------- QR pairing ----------
+
+/** The one-time secret shown as a QR code, while pairing; it stands in for the code. */
+let pairingSecret: string | null = null;
+
+function startQrPairing() {
+  pairingSecret = newSecret();
+  const canvas = $<HTMLCanvasElement>('pair-qr-canvas');
+  drawQr(canvas, qrModules(qrText(pairingSecret)), 300, devicePixelRatio || 1);
+  $('pair-qr-status').textContent = 'Waiting for your phone…';
+  $('pair-qr').hidden = false;
+  $('pairing-form').hidden = true;
+  // Connect with the secret; the phone accepts it once it has scanned the code.
+  const saved = loadSaved();
+  settings = { ...settings, code: pairingSecret, host: saved.host, port: saved.port };
+  conn.restart();
+}
+
+/** Leave QR pairing without a result: back to the saved code (if any). */
+function stopQrPairing() {
+  if (!pairingSecret) return;
+  pairingSecret = null;
+  const saved = loadSaved();
+  settings = { ...settings, code: saved.code, host: saved.host, port: saved.port };
+  if (saved.code) conn.restart();
+}
+
+function onPaired(raw: unknown) {
+  const code = pairedCode(raw);
+  if (!pairingSecret || !code) return; // only the car that showed a QR code asked for it
+  pairingSecret = null;
+  // Keep the address that worked (the hotspot default in the car).
+  const s: Settings = { ...loadSaved(), code, host: settings.host, port: settings.port };
+  save(s);
+  settings = { ...settings, code, host: s.host, port: s.port };
+  showPairing(false);
+  toast('Paired with your phone');
+  conn.restart(); // the phone switches back to the real code in a moment
+}
+
+$('pair-manual').addEventListener('click', () => {
+  stopQrPairing();
+  $('pair-qr').hidden = true;
+  $('pairing-form').hidden = false;
+});
+$('pair-scan').addEventListener('click', startQrPairing);
+$('pair-qr-cancel').addEventListener('click', () => { stopQrPairing(); showPairing(false); });
+
 const form = $<HTMLFormElement>('pairing-form');
 function showPairing(on: boolean) {
   $('pairing').hidden = !on;
@@ -823,6 +878,9 @@ function showPairing(on: boolean) {
   $<HTMLInputElement>('f-port').value = String(s.port);
   $('f-error').textContent = '';
   $('f-cancel').hidden = !s.code && !DEMO;
+  $('pair-qr-cancel').hidden = !s.code && !DEMO;
+  $('pair-qr').hidden = true;
+  $('pairing-form').hidden = false;
   renderDisplay();
 }
 
@@ -846,6 +904,7 @@ form.addEventListener('submit', (e) => {
     : !host ? 'Enter the phone address.' : !port ? 'Port must be 1–65535.' : '';
   $('f-error').textContent = err;
   if (err) return;
+  pairingSecret = null; // typed a code instead
   const s: Settings = { ...saved, code, host, port: port! };
   save(s);
   const reconnect = !sameEndpoint(s, settings);
@@ -874,7 +933,7 @@ $('f-showtext').addEventListener('click', () => {
   renderDisplay();
   renderBanners();
 });
-$('f-cancel').addEventListener('click', () => showPairing(false));
+$('f-cancel').addEventListener('click', () => { stopQrPairing(); showPairing(false); });
 $('btn-settings').addEventListener('click', () => showPairing(true));
 
 // ---------- start ----------
@@ -895,6 +954,7 @@ if (DEMO) {
 } else if (!settings.code) {
   showStatus({ s: 'idle', text: 'Not paired' });
   showPairing(true);
+  startQrPairing(); // first visit: pair with the QR code (typing stays one tap away)
 } else {
   conn.start();
 }

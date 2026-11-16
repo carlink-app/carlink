@@ -11,6 +11,12 @@ import kotlin.system.exitProcess
 class EngineService : IEngine.Stub() {
     private var engine: Engine? = null
     private var client: IEngineClient? = null
+    // What the running engine was started with, to come back after pairing.
+    private var code = ""
+    private var port = 0
+    private var allow = ""
+    /** Bumped per pairing attempt: a stale timeout must not end a newer one. */
+    private var pairingGen = 0
     private val appUid by lazy { Shell.context.packageManager.getPackageUid(APP_PACKAGE, 0) }
 
     @Synchronized
@@ -24,7 +30,10 @@ class EngineService : IEngine.Stub() {
             Shell.init()
             // Defense in depth: release builds never widen who may connect.
             val dev = if (app.tslink.BuildConfig.DEBUG) devAllow else ""
-            engine = Engine(code, port, allowList(dev)).also { it.toApp = toApp() }
+            this.code = code
+            this.port = port
+            allow = allowList(dev)
+            engine = Engine(code, port, allow).also { it.toApp = toApp() }
             if (dev.isNotEmpty()) Log.w(TAG, "DEV: also accepting the car page from $dev")
             "running on :$port"
         } catch (t: Throwable) {
@@ -33,12 +42,48 @@ class EngineService : IEngine.Stub() {
         }
     }
 
+    /**
+     * Pair a car from the one-time secret in its QR code: for up to
+     * [PAIRING_MS] the engine accepts that secret instead of the pairing code
+     * and sends the real code to the first car that proves it has the secret.
+     * Then back to normal.
+     */
+    @Synchronized
+    override fun startPairing(secret: String): String {
+        if (!fromTSLink()) return "denied"
+        val current = engine ?: return "start the engine first"
+        val s = secret.filter { it.isLetterOrDigit() }.uppercase()
+        if (s.length !in 16..64) return "not a TSLink pairing code"
+        current.stop(waitMs = 2_000)
+        val gen = ++pairingGen
+        engine = Engine(s, port, allow, handover = code).also { e ->
+            e.toApp = toApp()
+            // A moment for the message to leave before the engine restarts.
+            e.onPaired = { Thread { Thread.sleep(1_500); endPairing(gen) }.start() }
+        }
+        Thread { Thread.sleep(PAIRING_MS); endPairing(gen) }.start()
+        Log.i(TAG, "pairing: waiting for the car (up to ${PAIRING_MS / 1000} s)")
+        return "pairing"
+    }
+
+    /** Back to the normal engine, if pairing attempt [gen] is still the current one. */
+    @Synchronized
+    private fun endPairing(gen: Int) {
+        if (gen != pairingGen) return
+        pairingGen++
+        val e = engine ?: return
+        e.stop(waitMs = 2_000)
+        engine = Engine(code, port, allow).also { it.toApp = toApp() }
+        Log.i(TAG, "pairing: done, normal engine back")
+    }
+
     /** "stopped", or the engine's state plus the cert fingerprint the car page shows too. */
     override fun status(): String = engine?.let { "${it.status} · cert ${it.fingerprint()}" } ?: "stopped"
 
     @Synchronized
     override fun stop() {
         if (!fromTSLink()) return
+        pairingGen++ // a pending pairing end must not restart a stopped engine
         engine?.stop()
         engine = null
     }
@@ -120,5 +165,9 @@ class EngineService : IEngine.Stub() {
             engine = null
         }
         exitProcess(0)
+    }
+
+    private companion object {
+        const val PAIRING_MS = 120_000L
     }
 }
