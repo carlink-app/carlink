@@ -41,6 +41,8 @@ import kotlin.concurrent.thread
 class MainActivity : Activity() {
     companion object {
         const val CAR_PAGE = "https://tslink.app/"
+        /** Pairing results polled once a second, a bit past the engine's 2 minute window. */
+        private const val PAIRING_POLLS = 130
         private const val REQ_SHIZUKU = 1
         private const val REQ_BLUETOOTH = 2
         private const val REQ_NOTIFICATIONS = 3
@@ -183,10 +185,30 @@ class MainActivity : Activity() {
                     ?: return@addOnSuccessListener showMessage("That isn't a TSLink pairing code. Open tslink.app in the car.")
                 showMessage("Pairing...")
                 call(onResult = { r ->
-                    showMessage(if (r == "pairing") "Pairing: the car connects in a few seconds. Keep the car page open." else r)
+                    if (r != "pairing") return@call showMessage(r)
+                    showMessage("Pairing: the car connects in a few seconds. Keep the car page open.")
+                    watchPairing(PAIRING_POLLS)
                 }) { it.startPairing(secret) }
             }
             .addOnFailureListener { e -> showMessage("error: scanner unavailable (${e.message})") }
+    }
+
+    /**
+     * Tell the user which car got the code: anyone else on the hotspot who
+     * saw the QR code could have raced the car (then: New code).
+     */
+    private fun watchPairing(left: Int) {
+        if (left <= 0 || isDestroyed) return
+        call(onResult = { r ->
+            when {
+                r.startsWith("paired ") -> showMessage(
+                    "Paired with the car at ${r.removePrefix("paired ").substringBefore(':')}. " +
+                        "If the car didn't connect, another device may have taken the code: tap New code.",
+                )
+                r == "expired" -> showMessage("Pairing timed out. Open tslink.app in the car and scan again.")
+                r == "waiting" -> window.decorView.postDelayed({ watchPairing(left - 1) }, 1_000)
+            }
+        }) { it.pairingResult() }
     }
 
     private fun connectionCard(parent: LinearLayout) {

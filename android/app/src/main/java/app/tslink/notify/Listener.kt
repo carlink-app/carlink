@@ -117,6 +117,8 @@ class Listener : NotificationListenerService() {
     /** Engine asks to open a notification on the car display. */
     private fun fromEngine(m: JSONObject) {
         if (m.optString("t") == "session") return CarSessionNotice.update(this, m.optBoolean("up"))
+        // A new engine (started, or back from pairing) has nothing: send it all again.
+        if (m.optString("t") == "resync") return mainExecutor.execute { resync(); sendIcons(); media?.resend() }
         // Binder thread: media controls belong on the main thread with the watcher.
         if (m.optString("t") == "media-cmd") return m.optString("a").let { a -> mainExecutor.execute { media?.command(a) } }
         if (m.optString("t") != "open") return

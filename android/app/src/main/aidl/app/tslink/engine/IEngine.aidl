@@ -35,4 +35,6 @@ interface IEngine {
 
     // Pair a car from the one-time secret in its QR code (see EngineService).
     String startPairing(String secret) = 11;
+    // "", "waiting", "paired <car address>" or "expired".
+    String pairingResult() = 12;
 }

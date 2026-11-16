@@ -19,9 +19,10 @@ class PairingTest {
 
     @Test fun trimsAndChecksLengthLimits() {
         assertEquals("ABCDEFGHJKLMNPQRSTUV", Pairing.secretFrom("TSLINK-PAIR:ABCDEFGHJKLMNPQRSTUV\n"))
-        assertEquals("A".repeat(16), Pairing.secretFrom("TSLINK-PAIR:" + "a".repeat(16)))
-        assertEquals("A".repeat(64), Pairing.secretFrom("TSLINK-PAIR:" + "A".repeat(64)))
-        assertNull(Pairing.secretFrom("TSLINK-PAIR:" + "A".repeat(15)))
+        assertEquals("A".repeat(20), Pairing.secretFrom("TSLINK-PAIR:" + "a".repeat(20)))
+        assertNull(Pairing.secretFrom("TSLINK-PAIR:" + "A".repeat(19)))
+        assertNull(Pairing.secretFrom("TSLINK-PAIR:" + "A".repeat(21)))
+        assertNull(Pairing.secretFrom("TSLINK-PAIR:ABCDEFGHJKLMNPQRSTI1")) // I and 1 aren't in the alphabet
         assertNull(Pairing.secretFrom("TSLINK-PAIR:"))
         assertNull(Pairing.secretFrom("XTSLINK-PAIR:ABCDEFGHJKLMNPQRSTUV")) // prefix must lead
     }

@@ -32,8 +32,8 @@ class Engine(
     allow: String,
     private val handover: String? = null,
 ) : NativeCore.Listener {
-    /** Pairing mode: called once the real code went to the car. */
-    @Volatile var onPaired: (() -> Unit)? = null
+    /** Pairing mode: called with the car's address once the real code went to it. */
+    @Volatile var onPaired: ((String) -> Unit)? = null
     private var handedOver = false
     companion object {
         const val MAX_PANES = 4
@@ -167,6 +167,7 @@ class Engine(
     }
 
     private fun handleApp(m: JSONObject) {
+        if (handover != null) return // pairing mode serves nothing but the code
         when (m.optString("t")) {
             "notif" -> Notif.sanitize(m)?.let {
                 // "quiet": already on the phone when the app linked (re-sync after
@@ -220,7 +221,7 @@ class Engine(
                 handedOver = true
                 send(JSONObject().put("t", "paired").put("code", handover))
                 Log.i(TAG, "pairing: code sent to $remote")
-                onPaired?.invoke()
+                onPaired?.invoke(remote)
             }
             return@post
         }

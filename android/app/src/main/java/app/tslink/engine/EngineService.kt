@@ -17,6 +17,8 @@ class EngineService : IEngine.Stub() {
     private var allow = ""
     /** Bumped per pairing attempt: a stale timeout must not end a newer one. */
     private var pairingGen = 0
+    /** Last pairing attempt for the app: "", "waiting", "paired <car address>", "expired". */
+    @Volatile private var pairing = ""
     private val appUid by lazy { Shell.context.packageManager.getPackageUid(APP_PACKAGE, 0) }
 
     @Synchronized
@@ -34,6 +36,7 @@ class EngineService : IEngine.Stub() {
             this.port = port
             allow = allowList(dev)
             engine = Engine(code, port, allow).also { it.toApp = toApp() }
+            resyncApp()
             if (dev.isNotEmpty()) Log.w(TAG, "DEV: also accepting the car page from $dev")
             "running on :$port"
         } catch (t: Throwable) {
@@ -58,8 +61,12 @@ class EngineService : IEngine.Stub() {
         engine = Engine(s, port, allow, handover = code).also { e ->
             e.toApp = toApp()
             // A moment for the message to leave before the engine restarts.
-            e.onPaired = { Thread { Thread.sleep(1_500); endPairing(gen) }.start() }
+            e.onPaired = { remote ->
+                pairing = "paired $remote"
+                Thread { Thread.sleep(1_500); endPairing(gen) }.start()
+            }
         }
+        pairing = "waiting"
         Thread { Thread.sleep(PAIRING_MS); endPairing(gen) }.start()
         Log.i(TAG, "pairing: waiting for the car (up to ${PAIRING_MS / 1000} s)")
         return "pairing"
@@ -73,8 +80,15 @@ class EngineService : IEngine.Stub() {
         val e = engine ?: return
         e.stop(waitMs = 2_000)
         engine = Engine(code, port, allow).also { it.toApp = toApp() }
+        if (pairing == "waiting") pairing = "expired"
+        resyncApp()
         Log.i(TAG, "pairing: done, normal engine back")
     }
+
+    override fun pairingResult(): String = if (fromTSLink()) pairing else ""
+
+    /** A new engine starts empty: the app sends notifications, icons and what plays again. */
+    private fun resyncApp() = toApp()?.invoke(JSONObject().put("t", "resync"))
 
     /** "stopped", or the engine's state plus the cert fingerprint the car page shows too. */
     override fun status(): String = engine?.let { "${it.status} · cert ${it.fingerprint()}" } ?: "stopped"
@@ -83,6 +97,7 @@ class EngineService : IEngine.Stub() {
     override fun stop() {
         if (!fromTSLink()) return
         pairingGen++ // a pending pairing end must not restart a stopped engine
+        pairing = ""
         engine?.stop()
         engine = null
     }
@@ -171,6 +186,5 @@ class EngineService : IEngine.Stub() {
     }
 }
 
-/** [raw] as the engine's stand-in code while pairing: letters and digits only, upper case; null unless 16..64 long. */
-internal fun pairingSecret(raw: String): String? =
-    raw.filter { it.isLetterOrDigit() }.uppercase().takeIf { it.length in 16..64 }
+/** [raw] as the engine's stand-in code while pairing (upper case), or null unless it is exactly a page secret. */
+internal fun pairingSecret(raw: String): String? = raw.uppercase().takeIf(app.tslink.ui.Pairing::isSecret)

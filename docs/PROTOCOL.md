@@ -226,6 +226,12 @@ different week (clock off).
 4. The page stores the code and the address it connected to; the engine goes
    back to the normal code about 1.5 s later and the page reconnects with it.
 
+The secret is exactly 20 characters from the alphabet; the phone refuses
+anything else. While pairing, the engine relays nothing but `paired` (no
+notifications, media or apps). The phone app then shows the address of the
+car that got the code: if the car didn't connect, someone else on the hotspot
+who saw the QR code may have raced it, and "New code" revokes it.
+
 Typing the code on the page stays available ("Type the code instead").
 
 ## Now playing

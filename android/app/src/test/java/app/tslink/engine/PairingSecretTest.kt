@@ -5,17 +5,14 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class PairingSecretTest {
-    @Test fun uppercasesAndDropsSeparators() {
-        assertEquals("ABCDEFGHJKLMNPQRSTUV", pairingSecret("abcd-efgh jklm_npqr stuv"))
-    }
+    @Test fun uppercases() = assertEquals("ABCDEFGHJKLMNPQRSTUV", pairingSecret("abcdefghjklmnpqrstuv"))
 
-    @Test fun lengthLimits() {
-        assertEquals("A".repeat(16), pairingSecret("A".repeat(16)))
-        assertEquals("A".repeat(64), pairingSecret("A".repeat(64)))
-        assertNull(pairingSecret("A".repeat(15)))
-        assertNull(pairingSecret("A".repeat(65)))
-        // Separators don't count towards the length.
-        assertNull(pairingSecret("-".repeat(20) + "A".repeat(15)))
+    @Test fun onlyExactPageSecrets() {
+        assertNull(pairingSecret("abcd-efgh jklm_npqr stuv")) // separators aren't part of a secret
+        assertNull(pairingSecret("A".repeat(19)))
+        assertNull(pairingSecret("A".repeat(21)))
+        assertNull(pairingSecret("ABCDEFGHJKLMNPQRSTU0")) // 0 isn't in the alphabet
+        assertNull(pairingSecret("ÄBCDEFGHJKLMNPQRSTUV"))
         assertNull(pairingSecret(""))
     }
 
