@@ -48,3 +48,26 @@ export function refreshRecents(recents: readonly AppInfo[], apps: readonly AppIn
     return a.icon || !r.icon ? a : { ...a, icon: r.icon };
   });
 }
+
+/**
+ * Sidebar with [pkg] moved to the front (the phone says it's in front),
+ * taking its entry from the app list, else the sidebar; null if the page
+ * doesn't know the app (the sidebar stays as it is).
+ */
+export function withFront(recents: readonly AppInfo[], apps: readonly AppInfo[], pkg: string): AppInfo[] | null {
+  const app = apps.find((a) => a.pkg === pkg) ?? recents.find((a) => a.pkg === pkg);
+  return app ? [app, ...recents.filter((r) => r.pkg !== app.pkg)] : null;
+}
+
+/**
+ * What a new session brings back on the first pane-0 frame: relaunch the app
+ * the page had in front (if still on the sidebar), or, for a page that had
+ * none (reloaded), show what the phone says it put back ([front]).
+ */
+export function resumeAction(recents: readonly AppInfo[], current: string | null, front: unknown):
+  { launch: AppInfo } | { front: string } | null {
+  const a = current ? recents.find((r) => r.pkg === current) : undefined;
+  if (a) return { launch: a };
+  if (!current && typeof front === 'string' && front) return { front };
+  return null;
+}

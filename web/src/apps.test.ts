@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { afterClose, groupApps, refreshRecents } from './apps';
+import { afterClose, groupApps, refreshRecents, resumeAction, withFront } from './apps';
 import type { AppInfo } from './protocol';
 
 const app = (pkg: string, label: string, cat?: string): AppInfo => ({ pkg, cls: `${pkg}.Main`, label, cat } as AppInfo);
@@ -121,5 +121,52 @@ describe('refreshRecents', () => {
   it('empty inputs', () => {
     expect(refreshRecents([], [r('a')])).toEqual([]);
     expect(refreshRecents([r('a')], [])).toEqual([r('a')]);
+  });
+});
+
+describe('withFront', () => {
+  const waze = app('com.waze', 'Waze', 'nav');
+  const spotify = app('com.spotify.music', 'Spotify', 'music');
+  const maps = app('maps', 'Maps', 'nav');
+
+  it('moves a sidebar app to the front, using the fresher app-list entry', () => {
+    const fresh = { ...spotify, label: 'Spotify (new)' };
+    expect(withFront([waze, spotify], [fresh], 'com.spotify.music')).toEqual([fresh, waze]);
+  });
+  it('adds an app from the app list that is not on the sidebar', () => {
+    expect(withFront([waze], [maps, waze], 'maps')).toEqual([maps, waze]);
+  });
+  it('falls back to the sidebar entry before the app list arrives', () => {
+    expect(withFront([waze, spotify], [], 'com.spotify.music')).toEqual([spotify, waze]);
+  });
+  it('already in front: same order, new array', () => {
+    const r = [waze, spotify];
+    const next = withFront(r, [], 'com.waze');
+    expect(next).toEqual(r);
+    expect(next).not.toBe(r);
+  });
+  it('unknown app: null (sidebar unchanged)', () => {
+    expect(withFront([waze], [maps], 'x.unknown')).toBeNull();
+    expect(withFront([], [], '')).toBeNull();
+  });
+});
+
+describe('resumeAction', () => {
+  const waze = app('com.waze', 'Waze', 'nav');
+  const spotify = app('com.spotify.music', 'Spotify', 'music');
+
+  it('relaunches what the page had in front, whatever the phone says', () => {
+    expect(resumeAction([spotify, waze], 'com.waze', 'com.spotify.music')).toEqual({ launch: waze });
+  });
+  it('a reloaded page shows what the phone put back', () => {
+    expect(resumeAction([waze], null, 'com.spotify.music')).toEqual({ front: 'com.spotify.music' });
+  });
+  it('nothing to bring back', () => {
+    expect(resumeAction([waze], null, undefined)).toBeNull();
+    expect(resumeAction([waze], null, '')).toBeNull();
+    expect(resumeAction([waze], null, 42)).toBeNull();
+  });
+  it('a current app gone from the sidebar does not fall back to the phone', () => {
+    expect(resumeAction([waze], 'com.spotify.music', 'com.waze')).toBeNull();
   });
 });

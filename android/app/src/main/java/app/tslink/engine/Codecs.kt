@@ -9,7 +9,8 @@ import android.util.Log
 
 object Codecs {
     private const val TAG = "tslink"
-    private const val TOP_LEVEL = 3
+    /** Highest format level for [configure] (all optional keys). */
+    const val TOP_LEVEL = 3
 
     fun mime(codec: String): String = if (codec == "hevc") MediaFormat.MIMETYPE_VIDEO_HEVC else MediaFormat.MIMETYPE_VIDEO_AVC
 
@@ -69,33 +70,67 @@ object Codecs {
             // Long GOP; keyframes are requested when a client (re)connects or
             // the sender has to skip frames.
             setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 10)
-            if (level >= 1) {
-                // Static screen: resend the last frame every 100 ms so the car
-                // stays in sync without a constant 60 fps stream.
-                setLong(MediaFormat.KEY_REPEAT_PREVIOUS_FRAME_AFTER, 100_000L)
-            }
-            if (level >= 2) {
-                setInteger(MediaFormat.KEY_MAX_B_FRAMES, 0)
-                setInteger(MediaFormat.KEY_PREPEND_HEADER_TO_SYNC_FRAMES, 1)
-            }
-            if (level >= 3) {
-                setInteger(MediaFormat.KEY_PRIORITY, 0) // realtime
-                setInteger(MediaFormat.KEY_LATENCY, 1)
-                // Keep the encoder clocked up between frames (lower encode latency).
-                setInteger(MediaFormat.KEY_OPERATING_RATE, Short.MAX_VALUE.toInt())
+            for ((key, value) in optionalKeys(level)) {
+                if (value is Long) setLong(key, value) else setInteger(key, value.toInt())
             }
         }
-        for (level in TOP_LEVEL downTo 0) {
+        val level = firstAccepted(
+            TOP_LEVEL,
+            retryable = { it is IllegalArgumentException || it is MediaCodec.CodecException },
+            attempt = { encoder.configure(format(it), null, null, MediaCodec.CONFIGURE_FLAG_ENCODE) },
+            refused = { level, e -> Log.w(TAG, "encoder ${encoder.codecInfo.name} refused format level $level: $e") },
+            reset = { encoder.reset() },
+        )
+        if (level < TOP_LEVEL) Log.w(TAG, "encoder ${encoder.codecInfo.name} accepted format level $level of $TOP_LEVEL")
+    }
+
+    /**
+     * The optional format keys at [level] (0 = none, [TOP_LEVEL] = all), in
+     * insertion order; each level adds to the one below. Long values go in
+     * with setLong, the rest with setInteger.
+     */
+    fun optionalKeys(level: Int): Map<String, Number> = buildMap {
+        if (level >= 1) {
+            // Static screen: resend the last frame every 100 ms so the car
+            // stays in sync without a constant 60 fps stream.
+            put(MediaFormat.KEY_REPEAT_PREVIOUS_FRAME_AFTER, 100_000L)
+        }
+        if (level >= 2) {
+            put(MediaFormat.KEY_MAX_B_FRAMES, 0)
+            put(MediaFormat.KEY_PREPEND_HEADER_TO_SYNC_FRAMES, 1)
+        }
+        if (level >= 3) {
+            put(MediaFormat.KEY_PRIORITY, 0) // realtime
+            put(MediaFormat.KEY_LATENCY, 1)
+            // Keep the encoder clocked up between frames (lower encode latency).
+            put(MediaFormat.KEY_OPERATING_RATE, Short.MAX_VALUE.toInt())
+        }
+    }
+
+    /**
+     * Calls [attempt] with [top], [top]-1, ... 0 until one doesn't throw, and
+     * returns that level. A [retryable] failure is reported to [refused], then
+     * [reset] runs before the next level; level 0's failure, or any other
+     * exception, is rethrown.
+     */
+    fun firstAccepted(
+        top: Int,
+        retryable: (Exception) -> Boolean,
+        attempt: (Int) -> Unit,
+        refused: (Int, Exception) -> Unit,
+        reset: () -> Unit,
+    ): Int {
+        for (level in top downTo 0) {
             try {
-                encoder.configure(format(level), null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
-                if (level < TOP_LEVEL) Log.w(TAG, "encoder ${encoder.codecInfo.name} accepted format level $level of $TOP_LEVEL")
-                return
+                attempt(level)
+                return level
             } catch (e: Exception) {
-                if (e !is IllegalArgumentException && e !is MediaCodec.CodecException) throw e
-                Log.w(TAG, "encoder ${encoder.codecInfo.name} refused format level $level: $e")
+                if (!retryable(e)) throw e
+                refused(level, e)
                 if (level == 0) throw e
-                encoder.reset()
+                reset()
             }
         }
+        throw IllegalArgumentException("no levels to try: $top")
     }
 }

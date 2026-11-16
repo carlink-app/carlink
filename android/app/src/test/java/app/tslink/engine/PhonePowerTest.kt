@@ -56,4 +56,20 @@ class PhonePowerTest {
 
     @Test fun unlockedButAsleepStillGoesDark() =
         assertEquals(Step.DARKEN, pollStep(interactive = false, dark = false, tick = 0, unlocked = true))
+
+    @Test fun unlockedDoesNotChangeDarkHandling() {
+        // pollStep's caller only passes unlocked for a lit phone, but dark rules stay put either way.
+        assertEquals(Step.LIGHTEN, pollStep(interactive = false, dark = true, tick = 0, unlocked = true))
+        assertEquals(Step.REAPPLY, pollStep(interactive = true, dark = true, tick = 10, litFor = 60_000, timeout = 30_000, unlocked = true))
+        assertEquals(Step.NONE, pollStep(interactive = true, dark = true, tick = 3, unlocked = true))
+    }
+
+    @Test fun unlockedBelowTheTimeoutDoesNothing() =
+        assertEquals(Step.NONE, pollStep(interactive = true, dark = false, tick = 0, litFor = 0, timeout = 30_000, unlocked = true))
+
+    /** Unlocked on the pad for a long drive, then locked: dark after one more timeout's worth. */
+    @Test fun lockingAfterALongUnlockedStretchGoesDark() {
+        assertEquals(Step.NONE, pollStep(interactive = true, dark = false, tick = 0, litFor = 3_600_000, timeout = 30_000, unlocked = true))
+        assertEquals(Step.DARKEN, pollStep(interactive = true, dark = false, tick = 0, litFor = 3_600_000, timeout = 30_000, unlocked = false))
+    }
 }

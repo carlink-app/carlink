@@ -47,6 +47,10 @@ describe('saved settings and fragment overrides', () => {
     save({ code: 'ABCD-EFGH-JKLM', host: '10.0.0.2', port: 5000 });
     expect(loadSaved()).toEqual({ code: 'ABCD-EFGH-JKLM', host: '10.0.0.2', port: 5000 });
   });
+  it('persists only the pairing fields', () => {
+    save({ ...saved, showText: false, extra: 1 } as Settings);
+    expect(JSON.parse(localStorage.getItem('tslink.settings') ?? '')).toEqual({ code: 'SAVED', host: '10.0.0.2', port: 5000 });
+  });
   it('falls back per field on corrupt or wrongly typed storage', () => {
     localStorage.setItem('tslink.settings', '{not json');
     expect(loadSaved()).toEqual(defaults);

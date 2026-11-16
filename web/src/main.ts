@@ -8,7 +8,7 @@ import type { Codec } from './h26x';
 import { PANE_DPI, type AppInfo, type FromWorker, type PageMsg, type PaneLayout, type PaneStats, type PhoneMsg, type ToWorker } from './protocol';
 import { formatCode, makeCert, weekStart } from './cert';
 import { ErrorWindow, fingerprint, LogRing, maskCode, resolveCode, shortUA, utcStamp } from './diag';
-import { afterClose, groupApps, refreshRecents } from './apps';
+import { afterClose, groupApps, refreshRecents, resumeAction, withFront } from './apps';
 import { accentFrom, textOn } from './theme';
 import { describe as describePhone, parsePhoneStatus } from './phonestatus';
 import { parseMedia, subtitle, type NowPlaying } from './media';
@@ -224,11 +224,11 @@ function onMessage(m: PhoneMsg) {
       // Bring back what the car was showing (a no-op if it's still in front).
       if (resumePending && m.id === 0) {
         resumePending = false;
-        const a = current ? recents.find((r) => r.pkg === current) : undefined;
-        if (a) send({ t: 'launch', pane: 0, pkg: a.pkg, cls: a.cls });
+        const r = resumeAction(recents, current, m.front);
+        if (r && 'launch' in r) send({ t: 'launch', pane: 0, pkg: r.launch.pkg, cls: r.launch.cls });
         // A reloaded page doesn't know: the phone says what it put back, so
         // show that instead of the launcher on top of it.
-        else if (!current && typeof m.front === 'string' && m.front) showFront(m.front);
+        else if (r) showFront(r.front);
       }
       break;
     }
@@ -288,8 +288,8 @@ function remember(id: string) {
 /** [pkg] is in front on the car screen (the phone says so): sidebar and launcher follow. */
 function showFront(pkg: string) {
   current = pkg;
-  const app = apps.find((a) => a.pkg === pkg) ?? recents.find((a) => a.pkg === pkg);
-  if (app) setRecents([app, ...recents.filter((r) => r.pkg !== app.pkg)]);
+  const next = withFront(recents, apps, pkg);
+  if (next) setRecents(next);
   showLauncher(false);
 }
 

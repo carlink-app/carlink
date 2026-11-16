@@ -80,13 +80,12 @@ class Listener : NotificationListenerService() {
         val ranking = Ranking().takeIf { rankingMap.getRanking(sbn.key, it) }
         val id = idFor(sbn.key)
         val override = if (Build.VERSION.SDK_INT >= 31) ranking?.lockscreenVisibilityOverride else null
-        val mode = Prefs.carText(this)
+        val rule = CarTextRule.of(Prefs.carText(this), ::sensitiveOnLockscreen, ::notificationsOnLockscreen)
         val info = NotifInfo.of(
             sbn, packageName, ranking?.importance, override,
-            // Always: private content shows; like the lock screen: its settings decide.
-            allowPrivate = mode == Prefs.CarText.ALWAYS || sensitiveOnLockscreen(),
-            hideContent = mode != Prefs.CarText.ALWAYS && !notificationsOnLockscreen(),
-        )?.let { if (mode == Prefs.CarText.NEVER) it.withoutText() else it }
+            allowPrivate = rule.allowPrivate,
+            hideContent = rule.hideContent,
+        )?.let { if (rule.stripText) it.withoutText() else it }
         if (info == null) {
             // An update can turn a shown notification into one we don't show (silent, ongoing).
             forget(id)
@@ -180,6 +179,22 @@ class Listener : NotificationListenerService() {
     private fun idFor(key: String): String {
         val d = MessageDigest.getInstance("SHA-256").digest(key.toByteArray())
         return "n" + d.take(8).joinToString("") { "%02x".format(it) }
+    }
+}
+
+/**
+ * How the car text setting ([Prefs.CarText]) feeds [NotifInfo.decide]:
+ * Always shows private content regardless of the lock screen; like the lock
+ * screen (default) lets its settings decide; Never also drops the message text.
+ */
+data class CarTextRule(val allowPrivate: Boolean, val hideContent: Boolean, val stripText: Boolean) {
+    companion object {
+        /** The lock-screen settings are only read when [mode] needs them. */
+        fun of(mode: Prefs.CarText, sensitiveOnLockscreen: () -> Boolean, notificationsOnLockscreen: () -> Boolean) = CarTextRule(
+            allowPrivate = mode == Prefs.CarText.ALWAYS || sensitiveOnLockscreen(),
+            hideContent = mode != Prefs.CarText.ALWAYS && !notificationsOnLockscreen(),
+            stripText = mode == Prefs.CarText.NEVER,
+        )
     }
 }
 

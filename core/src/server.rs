@@ -719,6 +719,14 @@ mod tests {
     }
 
     #[test]
+    fn heavy_types_are_all_allowed() {
+        // A heavy type missing from CONTROL_TYPES would close the session instead of being budgeted.
+        for t in HEAVY_TYPES {
+            assert!(CONTROL_TYPES.contains(t), "{t}");
+        }
+    }
+
+    #[test]
     fn only_touch_moves_are_droppable() {
         let kind = |l: &str| validate_control(l).unwrap().1;
         assert_eq!(kind(r#"{"t":"touch","pane":0,"a":"move","id":0,"x":1,"y":2}"#), Kind::Move);
@@ -728,6 +736,8 @@ mod tests {
         assert_eq!(kind(r#"{"t":"close-all","pane":0}"#), Kind::Heavy);
         assert_eq!(kind(r#"{"t":"app-icons","pkgs":["com.waze","com.spotify.music"]}"#), Kind::Heavy);
         assert_eq!(kind(r#"{"t":"apps"}"#), Kind::Heavy);
+        // A media command makes the phone dispatch to the player: budgeted like a key.
+        assert_eq!(kind(r#"{"t":"media-cmd","a":"next"}"#), Kind::Heavy);
         assert_eq!(kind(r#"{"t":"keyframe","pane":0}"#), Kind::Other);
     }
 
