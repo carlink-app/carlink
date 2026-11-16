@@ -2,7 +2,7 @@
 // Video bytes are handed to the decode worker untouched.
 
 import './style.css';
-import { Connection, TIMED_OUT, type Status } from './connection';
+import { Connection, type Status } from './connection';
 import { demoApps, demoNotifs, DEMO_H, DEMO_W, startDemo } from './demo';
 import type { Codec } from './h26x';
 import { PANE_DPI, type AppInfo, type FromWorker, type PageMsg, type PaneLayout, type PaneStats, type PhoneMsg, type ToWorker } from './protocol';
@@ -12,7 +12,8 @@ import { afterClose, groupApps, refreshRecents, resumeAction, withFront } from '
 import { accentFrom, textOn } from './theme';
 import { describe as describePhone, parsePhoneStatus } from './phonestatus';
 import { parseMedia, subtitle, type NowPlaying } from './media';
-import { drawQr, newSecret, pairedCode, pairingPace, pairingView, qrModules, qrStatusText, qrText } from './pairing';
+import { drawQr, newSecret, pairedCode, pairingView, qrModules, qrStatusText, qrText } from './pairing';
+import { PairSession } from './pairsession';
 import { errorText, helpFor } from './help';
 import { attachLongPress } from './longpress';
 import { addPin, isPinned, MAX_PINS, parsePins, PINS_KEY, removePin, unpinnedRecents } from './pins';
@@ -195,9 +196,6 @@ const conn = new Connection({
   onFrame: forwardFrame,
   onLost: (buf) => toWorker({ type: 'lost', buf }, [buf]),
   onRtt: (ms) => rtt.push(ms),
-  // Pairing: the phone may switch any moment, so no growing backoff.
-  retryMs: () => pace().retryMs,
-  connectTimeoutMs: () => pace().connectTimeoutMs,
 });
 
 function send(m: PageMsg) {
@@ -237,7 +235,6 @@ function onMessage(m: PhoneMsg) {
     }
     case 'apps': void onApps(Array.isArray(m.list) ? m.list : []); break;
     case 'app-icons': if (Array.isArray(m.list)) onIcons(m.list); break;
-    case 'paired': onPaired(m.code); break;
     case 'media': setMedia(parseMedia(m as Record<string, unknown>)); break;
     case 'phone': showPhoneStatus(m as Record<string, unknown>); break;
     case 'rate': rateKbps = Number(m.kbps) || 0; break;
@@ -623,20 +620,8 @@ worker.onmessage = (e: MessageEvent<FromWorker>) => {
 
 let statusTimer = 0;
 let lastStatus: Status = { s: 'idle', text: '' };
-/** Pairing handshakes in a row that got no answer (see qrStatusText). */
-let unanswered = 0;
 
 function showStatus(st: Status) {
-  // While pairing, failed attempts are expected (the phone hasn't scanned yet).
-  if ((pairingSecret || performance.now() < pairedQuietUntil) && st.s !== 'connected') {
-    // A handshake that times out got no answer at all: the phone isn't at that address.
-    if (st.s === 'error') unanswered = st.text.startsWith(TIMED_OUT) ? unanswered + 1 : 0;
-    const q = qrStatusText(unanswered, settings.host, settings.port);
-    $('pair-qr-status').textContent = q.text;
-    $('pair-qr-status').classList.toggle('pair-warn', q.warn);
-    return;
-  }
-  unanswered = 0;
   // The retry countdown changes each time; without it, repeats collapse in the log.
   if (st.s === 'error') logLine(errorText(st.text));
   lastStatus = st;
@@ -1110,59 +1095,61 @@ function renderDebug() {
 
 // ---------- QR pairing ----------
 
-/** The one-time secret shown as a QR code, while pairing; it stands in for the code. */
+/** The one-time secret shown as a QR code, while pairing. */
 let pairingSecret: string | null = null;
-/** Just paired: the phone switches back to the real code; failed tries meanwhile are expected. */
-let pairedQuietUntil = 0;
-/** Fast reconnects after pairing, while the phone switches to the real code. */
-const PAIRED_QUIET_MS = 8000;
-const pace = () => pairingPace(!!pairingSecret, performance.now(), pairedQuietUntil);
+/** Waits on the phone's pairing port while the QR code is up (PairSession). */
+let pairSession: PairSession | null = null;
 
 function startQrPairing() {
+  stopPairSession();
   pairingSecret = newSecret();
-  unanswered = 0;
   const canvas = $<HTMLCanvasElement>('pair-qr-canvas');
   drawQr(canvas, qrModules(qrText(pairingSecret)), 300, devicePixelRatio || 1);
-  $('pair-qr-status').textContent = 'Waiting for your phone…';
-  $('pair-qr-status').classList.remove('pair-warn');
+  showQrStatus(0);
   $('pair-qr').hidden = false;
   $('pair-done').hidden = true;
   $('pairing-form').hidden = true;
-  // Connect with the secret; the phone accepts it once it has scanned the code.
-  useCode(pairingSecret);
-  conn.restart();
+  // A live session stays (Pair again); retries with a code that doesn't work
+  // stop meanwhile: failed handshakes would make Chrome throttle the page.
+  if (lastStatus.s !== 'connected') conn.stop();
+  const { host, port } = effective(overrides); // saved address, or a dev override
+  pairSession = new PairSession({ host, port, secret: pairingSecret, onCode: onPaired, onUnanswered: showQrStatus });
+  pairSession.start();
 }
 
-/** Connect with [code] at the saved address. */
-function useCode(code: string) {
-  const { host, port } = effective(overrides); // saved address, or a dev override
-  settings = { ...settings, code, host, port };
+function showQrStatus(unanswered: number) {
+  const { host, port } = effective(overrides);
+  const q = qrStatusText(unanswered, host, port);
+  $('pair-qr-status').textContent = q.text;
+  $('pair-qr-status').classList.toggle('pair-warn', q.warn);
+}
+
+function stopPairSession() {
+  pairSession?.stop();
+  pairSession = null;
 }
 
 /** Leave QR pairing without a result: back to the saved code (if any). */
 function stopQrPairing() {
   if (!pairingSecret) return;
   pairingSecret = null;
-  const { code } = loadSaved();
-  useCode(code);
-  if (code) conn.restart();
-  else conn.stop(); // nothing to connect with until a code is typed
+  stopPairSession();
+  if (loadSaved().code) conn.start(); // no-op if still connected
 }
 
-function onPaired(raw: unknown) {
-  const code = pairedCode(raw);
-  if (!pairingSecret || !code) return; // only the car that showed a QR code asked for it
+/** The phone scanned our QR code and sent the pairing code, sealed with its secret. */
+function onPaired(sealed: string) {
+  const code = pairedCode(sealed); // authentic (it opened with our secret); still only a well-formed code
+  if (!pairingSecret || !code) return;
   pairingSecret = null;
-  // Keep the address that worked (the hotspot default in the car).
-  const s: Settings = { ...loadSaved(), code, host: settings.host, port: settings.port };
+  pairSession = null;
+  const { host, port } = effective(overrides);
+  const s: Settings = { ...loadSaved(), code, host, port };
   save(s);
-  settings = { ...settings, code, host: s.host, port: s.port };
+  settings = { ...settings, code, host, port };
   showPairing(false);
   toast('Paired with your phone');
-  // Leaving the pairing session tells the phone to switch to the real code;
-  // reconnect at once and keep trying fast until it has.
-  pairedQuietUntil = performance.now() + PAIRED_QUIET_MS;
-  conn.restart();
+  if (!DEMO) conn.restart();
 }
 
 $('pair-manual').addEventListener('click', () => {

@@ -1,7 +1,6 @@
-// QR pairing (see docs/PROTOCOL.md "Pairing"): the page shows a one-time
-// secret as a QR code; the phone scans it and, for a short while, accepts the
-// secret instead of the pairing code; the first connection made with it gets
-// the real code in a `paired` message.
+// QR pairing (see docs/PROTOCOL.md "Pairing with a QR code"): the page shows a
+// one-time secret as a QR code and waits on the phone's pairing port
+// (pairsession.ts); once the phone scans it, the real code comes sealed with it.
 import qrcode from 'qrcode-generator';
 import { CODE_LENGTH, groupCode, normalizeCode } from './cert';
 
@@ -22,7 +21,7 @@ export function newSecret(random: (a: Uint8Array<ArrayBuffer>) => Uint8Array = (
 
 export const qrText = (secret: string) => PAIR_LINK + secret;
 
-/** A pairing code from the phone's `paired` message, normalized; null if malformed. */
+/** A pairing code (opened from the phone's sealed `paired` box), normalized; null if malformed. */
 export function pairedCode(v: unknown): string | null {
   if (typeof v !== 'string') return null;
   const c = normalizeCode(v);
@@ -58,27 +57,6 @@ export function drawQr(canvas: HTMLCanvasElement, modules: boolean[][], cssSize:
  */
 export function pairingView(hasCode: boolean, connected: boolean): 'qr' | 'paired' {
   return hasCode && connected ? 'paired' : 'qr';
-}
-
-/** Retry pace while the QR code is up (the phone accepts the secret once it scanned it). */
-const PAIRING_RETRY_MS = 1000;
-/** Retry pace right after pairing, while the phone switches to the real code. */
-const PAIRED_RETRY_MS = 300;
-/**
- * Handshake limit while pairing: one started just as the phone switched codes
- * goes unanswered (measured: ~5 s lost twice). A car on the hotspot answers in ms.
- */
-const PAIRING_CONNECT_MS = 1500;
-
-/**
- * Connection pace around pairing: fast retries and short handshakes while the
- * QR code is up or until [quietUntil] after pairing; otherwise the normal
- * backoff and handshake time (undefined).
- */
-export function pairingPace(pairing: boolean, now: number, quietUntil: number): { retryMs?: number; connectTimeoutMs?: number } {
-  if (pairing) return { retryMs: PAIRING_RETRY_MS, connectTimeoutMs: PAIRING_CONNECT_MS };
-  if (now < quietUntil) return { retryMs: PAIRED_RETRY_MS, connectTimeoutMs: PAIRING_CONNECT_MS };
-  return { retryMs: undefined, connectTimeoutMs: undefined };
 }
 
 /** Handshakes in a row that got no answer before the QR screen says the address may be wrong. */

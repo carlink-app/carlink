@@ -24,14 +24,6 @@ export interface ConnectionHooks {
   /** A video stream that ended with an error; `buf` holds whatever arrived. */
   onLost(buf: ArrayBuffer): void;
   onRtt(ms: number): void;
-  /** A fixed wait before the next try (QR pairing: the phone switches any moment), or undefined for the backoff. */
-  retryMs?(): number | undefined;
-  /**
-   * How long to wait for the handshake, or undefined for the default 8 s.
-   * While the phone switches codes a handshake can go unanswered; giving up
-   * soon and trying again beats waiting out QUIC's retransmissions.
-   */
-  connectTimeoutMs?(): number | undefined;
 }
 
 const PING_MS = 20;
@@ -40,7 +32,12 @@ const AUTH_STEP_TIMEOUT_MS = 5000;
 /** No ping echo for this long on an open session -> treat it as dead. */
 const DEAD_MS = 4000;
 const BACKOFF_MIN_MS = 1000;
-const BACKOFF_MAX_MS = 5000;
+/**
+ * Chrome remembers each failed WebTransport handshake for 5 minutes and delays
+ * new ones 10 ms x 2^(failures-1), up to 60 s. Retrying at most every 30 s keeps
+ * a long outage to ~10 failures (~5 s delay) instead of the 60 s maximum.
+ */
+const BACKOFF_MAX_MS = 30_000;
 export const REJECTED = 'Pairing code rejected';
 /** Status text when a handshake gets no answer in time (nothing at that address). */
 export const TIMED_OUT = 'Timed out (phone unreachable?)';
@@ -119,11 +116,9 @@ export class Connection {
       }
       if (!live()) break;
       if (wasConnected) backoff = BACKOFF_MIN_MS;
-      const fixed = this.hooks.retryMs?.();
-      const wait = fixed ?? backoff;
-      this.hooks.onStatus({ s: 'error', text: `${why} · retrying in ${wait / 1000}s` });
-      await this.sleep(wait);
-      if (fixed === undefined) backoff = Math.min(backoff * 2, BACKOFF_MAX_MS);
+      this.hooks.onStatus({ s: 'error', text: `${why} · retrying in ${backoff / 1000}s` });
+      await this.sleep(backoff);
+      backoff = Math.min(backoff * 2, BACKOFF_MAX_MS);
     }
   }
 
@@ -153,8 +148,7 @@ export class Connection {
     );
     closed.catch(() => { /* raced below */ });
 
-    const readyMs = this.hooks.connectTimeoutMs?.() ?? READY_TIMEOUT_MS;
-    await withTimeout(Promise.race([wt.ready, closed]), readyMs, TIMED_OUT);
+    await withTimeout(Promise.race([wt.ready, closed]), READY_TIMEOUT_MS, TIMED_OUT);
     if (!live()) return;
 
     // Control stream: the phone speaks first (challenge).

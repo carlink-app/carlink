@@ -2,6 +2,7 @@
 //! Android engine over JNI (class app.tslink.engine.NativeCore).
 
 pub mod cert;
+pub mod pair;
 pub mod rate;
 pub mod server;
 
@@ -67,6 +68,10 @@ impl server::Listener for JniListener {
 
     fn on_rate(&self, level: u32) {
         self.call("onRate", "(I)V", |_| Ok(vec![JObjectOrInt::Int(level as i32)]));
+    }
+
+    fn on_paired(&self, remote: &str) {
+        self.call("onPaired", "(Ljava/lang/String;)V", |env| Ok(vec![JObjectOrInt::Obj(env.new_string(remote)?.into())]));
     }
 }
 
@@ -152,6 +157,14 @@ pub extern "system" fn Java_app_tslink_engine_NativeCore_nativeStop(_env: JNIEnv
         let server = unsafe { Box::from_raw(handle as *mut server::Server) };
         server.shutdown();
     }
+}
+
+/// The phone scanned a car page's QR code: hand that page the pairing code,
+/// sealed with the secret (server::Server::pair).
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_app_tslink_engine_NativeCore_nativePair(mut env: JNIEnv, _class: JClass, handle: jlong, secret: JString, code: JString) {
+    let (Some(server), Some(secret), Some(code)) = (handle_ref(handle), get_string(&mut env, &secret), get_string(&mut env, &code)) else { return };
+    server.pair(&secret, &code);
 }
 
 /// Hex SHA-256 of this week's certificate for a pairing code (diagnostics).

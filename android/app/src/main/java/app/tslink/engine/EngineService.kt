@@ -76,58 +76,28 @@ class EngineService : IEngine.Stub() {
     }
 
     /**
-     * Pair a car from the one-time secret in its QR code: for up to
-     * [PAIRING_MS] the engine accepts that secret instead of the pairing code
-     * and sends the real code to the first car that proves it has the secret.
-     * Then back to normal.
+     * Pair a car from the one-time secret in its QR code: the core seals the
+     * pairing code with it for the car page waiting on the pairing port (or
+     * arriving within [PAIRING_MS]). The running engine keeps serving cars.
      */
     @Synchronized
     override fun startPairing(secret: String): String {
         if (!fromTSLink()) return "denied"
         val current = engine ?: return "error: TSLink is off, start it first"
         val s = pairingSecret(secret) ?: return "not a TSLink pairing code"
-        current.stop(waitMs = 2_000)
         val gen = ++pairingGen
-        engine = try {
-            retryWhileInUse { Engine(s, port, allow, handover = code) }
-        } catch (t: Throwable) {
-            Log.e(TAG, "pairing: engine start failed", t)
-            engine = runCatching { retryWhileInUse { Engine(code, port, allow) }.also { it.toApp = toApp() } }.getOrNull()
-            return "error: $t"
-        }.also { e ->
-            e.toApp = toApp()
-            // The car closes the session once it has the code: switch back right
-            // then. A car that doesn't is switched after a moment for the message to leave.
-            e.onPaired = { remote ->
-                pairing = "paired $remote"
-                Thread { Thread.sleep(1_500); endPairing(gen) }.start()
-            }
-            e.onCarLeft = { Thread { endPairing(gen) }.start() }
-        }
+        current.onPaired = { remote -> if (gen == pairingGen) pairing = "paired $remote" }
+        current.pair(s)
         pairing = "waiting"
-        Thread { Thread.sleep(PAIRING_MS); endPairing(gen) }.start()
-        Log.i(TAG, "pairing: waiting for the car (up to ${PAIRING_MS / 1000} s)")
+        Thread { Thread.sleep(PAIRING_MS); expirePairing(gen) }.start()
+        Log.i(TAG, "pairing: waiting for the car page (up to ${PAIRING_MS / 1000} s)")
         return "pairing"
     }
 
-    /** Back to the normal engine, if pairing attempt [gen] is still the current one. */
+    /** No car page took pairing attempt [gen] in time. */
     @Synchronized
-    private fun endPairing(gen: Int) {
-        if (gen != pairingGen) return
-        pairingGen++
-        val e = engine ?: return
-        e.stop(waitMs = 2_000)
-        if (pairing == "waiting") pairing = "expired"
-        // Runs on its own thread: a failure must not take the process down, and
-        // must leave "stopped" (the app shows Off, Pair starts it again).
-        engine = try {
-            retryWhileInUse { Engine(code, port, allow) }.also { it.toApp = toApp() }
-        } catch (t: Throwable) {
-            Log.e(TAG, "pairing: normal engine didn't come back", t)
-            null
-        }
-        resyncApp()
-        Log.i(TAG, "pairing: done, normal engine back")
+    private fun expirePairing(gen: Int) {
+        if (gen == pairingGen && pairing == "waiting") pairing = "expired"
     }
 
     override fun pairingResult(): String = if (fromTSLink()) pairing else ""

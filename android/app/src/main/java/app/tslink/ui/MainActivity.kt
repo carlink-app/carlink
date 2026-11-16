@@ -13,7 +13,6 @@ import android.graphics.Typeface
 import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
-import android.os.SystemClock
 import android.provider.Settings
 import android.view.Gravity
 import android.view.View
@@ -44,8 +43,6 @@ class MainActivity : Activity() {
         const val CAR_PAGE = "https://tslink.app/"
         /** Pairing results polled once a second, a bit past the engine's 2 minute window. */
         private const val PAIRING_POLLS = 130
-        /** Pairing hands back to the normal engine when the car leaves (at most ~1.5 s), plus its stop. */
-        private const val ENGINE_SWAP_MS = 2_500L
         private const val STATUS_POLL_MS = 2_000L
         private const val REQ_SHIZUKU = 1
         private const val REQ_BLUETOOTH = 2
@@ -73,8 +70,6 @@ class MainActivity : Activity() {
     private var pendingScan = false
     /** A linked secret waiting for TSLink to run (with [pendingScan]): pair with it instead of scanning. */
     private var pendingSecret: String? = null
-    /** Until then (uptime ms) pairing is swapping engines: no status polls. */
-    private var pairingUntil = 0L
     /** A status poll is out (UI thread only). */
     private var polling = false
 
@@ -152,9 +147,8 @@ class MainActivity : Activity() {
     /** The engine doesn't push its state: while the screen is up, read it every couple of seconds (a car connecting). */
     private val refresher = object : Runnable {
         override fun run() {
-            // Not while a Pair tap starts TSLink or pairing swaps engines: an in-between
-            // "stopped" would drop the scan or flash Off/Disconnect (they refresh themselves).
-            if (engine != null && !pendingScan && !polling && SystemClock.uptimeMillis() > pairingUntil) {
+            // Not while a Pair tap starts TSLink: an in-between "stopped" would drop the scan.
+            if (engine != null && !pendingScan && !polling) {
                 polling = true // one at a time: a slow engine (hotspot restart) mustn't pile up threads
                 call(onResult = { polling = false; setStatus(it) }) { it.status() }
             }
@@ -335,8 +329,7 @@ class MainActivity : Activity() {
         showMessage("Pairing...")
         call(onResult = { r ->
             if (r != "pairing") return@call showMessage(r, Home.replyTone(r))
-            showMessage("Pairing: the car connects in a few seconds. Keep the car page open.")
-            pairingUntil = SystemClock.uptimeMillis() + PAIRING_POLLS * 1_000L
+            showMessage("Pairing: the car connects in a moment. Keep the car page open.")
             watchPairing(PAIRING_POLLS)
         }) { it.startPairing(secret) }
     }
@@ -390,10 +383,6 @@ class MainActivity : Activity() {
         if (left <= 0 || isDestroyed) return
         call(onResult = { r ->
             // The engine restarted with the real code: refresh the state line once it's back.
-            if (r != "waiting") {
-                pairingUntil = SystemClock.uptimeMillis() + ENGINE_SWAP_MS
-                window.decorView.postDelayed({ call { it.status() } }, ENGINE_SWAP_MS)
-            }
             when {
                 r.startsWith("paired ") -> showMessage(
                     "Paired with the car at ${r.removePrefix("paired ").substringBefore(':')}. " +

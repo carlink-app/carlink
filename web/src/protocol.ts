@@ -68,7 +68,6 @@ export type PhoneMsg =
   /** What plays on the phone (or `none`). */
   | { t: 'media'; none?: boolean; pkg?: string; app?: string; title?: string; artist?: string; playing?: boolean; prev?: boolean; next?: boolean; art?: string }
   /** QR pairing: the real pairing code, for the car that showed the QR code. */
-  | { t: 'paired'; code: string }
   | { t: 'launched'; pane: number; pkg: string }
   /** Phone's rate control: level in permille of the codec's max bitrate. */
   | { t: 'rate'; level: number; kbps: number }

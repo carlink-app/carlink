@@ -10,6 +10,8 @@ object NativeCore {
         fun onKeyframeNeeded(pane: Int)
         /** Bitrate level from the core's rate control, permille of the codec maximum. */
         fun onRate(level: Int)
+        /** The pairing code went to the car page at [remote] (QR pairing, nativePair). */
+        fun onPaired(remote: String)
     }
 
     const val FLAG_KEY = 1
@@ -18,5 +20,7 @@ object NativeCore {
     @JvmStatic external fun nativeSendFrame(handle: Long, pane: Int, buf: ByteBuffer, offset: Int, size: Int, ptsUs: Long, flags: Int): Boolean
     @JvmStatic external fun nativeSendControl(handle: Long, json: String)
     @JvmStatic external fun nativeStop(handle: Long)
+    /** A scanned QR [secret]: seal [code] for the car page waiting (or about to) on the pairing port. */
+    @JvmStatic external fun nativePair(handle: Long, secret: String, code: String)
     @JvmStatic external fun nativeCertHash(code: String): String
 }

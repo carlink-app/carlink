@@ -20,22 +20,15 @@ import java.util.concurrent.atomic.AtomicLong
  * and input. Runs in the shell-privileged process. Every callback from the
  * native core is posted to one thread, so all state is touched by it only.
  * Messages only arrive after the car authenticated (see core/src/server.rs).
- *
- * [handover]: pairing mode. [code] is then the one-time secret from the car
- * page's QR code, and the first car that authenticates with it gets the real
- * pairing code ([handover]) in a `paired` message; nothing else is served.
+ * QR pairing runs beside it on the core's pairing port ([pair]).
  */
 class Engine(
     private val code: String,
     port: Int,
     allow: String,
-    private val handover: String? = null,
 ) : NativeCore.Listener {
-    /** Pairing mode: called with the car's address once the real code went to it. */
+    /** QR pairing: called with the car page's address once the sealed code went to it. */
     @Volatile var onPaired: ((String) -> Unit)? = null
-    /** Pairing mode: the car that got the code left (it reconnects with the real code). */
-    @Volatile var onCarLeft: (() -> Unit)? = null
-    private var handedOver = false
     companion object {
         const val MAX_PANES = 4
         const val PHONE_STATUS_MS = 10_000L
@@ -190,7 +183,6 @@ class Engine(
     }
 
     private fun handleApp(m: JSONObject) {
-        if (handover != null) return // pairing mode serves nothing but the code
         when (m.optString("t")) {
             "notif" -> Notif.sanitize(m)?.let {
                 // "quiet": already on the phone when the app linked (re-sync after
@@ -238,20 +230,6 @@ class Engine(
         if (!connected) handler.postDelayed(releaseIdlePanes, PANE_GRACE_MS)
         status = if (connected) "car connected ($remote)" else "waiting for car"
         iconGeneration++ // icon batches of an earlier session are dropped
-        if (handover != null) {
-            when (handoverAction(connected, handedOver)) {
-                // The car proved it saw the QR code; hand over the real code.
-                Handover.SEND_CODE -> {
-                    handedOver = true
-                    send(JSONObject().put("t", "paired").put("code", handover))
-                    Log.i(TAG, "pairing: code sent to $remote")
-                    onPaired?.invoke(remote)
-                }
-                Handover.CAR_LEFT -> onCarLeft?.invoke()
-                Handover.NONE -> Unit
-            }
-            return@post
-        }
         reportSession(connected)
     }
 
@@ -260,6 +238,17 @@ class Engine(
     override fun onControl(json: String) = post { handle(JSONObject(json)) }
 
     override fun onKeyframeNeeded(pane: Int) = post { panes[pane]?.requestKeyframe() }
+
+    /** A scanned QR [secret]: the core seals [code] for the car page that showed it. */
+    fun pair(secret: String) {
+        val h = core.get()
+        if (h != 0L) NativeCore.nativePair(h, secret, code)
+    }
+
+    override fun onPaired(remote: String) {
+        Log.i(TAG, "pairing: code sent to $remote")
+        onPaired?.invoke(remote)
+    }
 
     override fun onRate(level: Int) = post {
         this.level = level
@@ -287,7 +276,6 @@ class Engine(
     private fun error(msg: String) = send(JSONObject().put("t", "error").put("msg", msg))
 
     private fun handle(m: JSONObject) {
-        if (handover != null) return // pairing mode serves nothing but the code
         when (m.getString("t")) {
             "hello" -> {
                 val codecs = m.optJSONArray("codecs")
@@ -468,17 +456,4 @@ class Engine(
         }
         if (waitMs > 0) done.await(waitMs, TimeUnit.MILLISECONDS)
     }
-}
-
-enum class Handover { SEND_CODE, CAR_LEFT, NONE }
-
-/**
- * Pairing mode, on a car session going [connected] or away: the first car in
- * gets the code; once it has it ([handedOver]) and leaves, pairing ends. A
- * page reloading before that doesn't end it, and nobody after gets the code.
- */
-internal fun handoverAction(connected: Boolean, handedOver: Boolean): Handover = when {
-    connected && !handedOver -> Handover.SEND_CODE
-    !connected && handedOver -> Handover.CAR_LEFT
-    else -> Handover.NONE
 }

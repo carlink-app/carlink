@@ -70,6 +70,8 @@ pub trait Listener: Send + Sync + 'static {
     fn on_keyframe_needed(&self, pane: u16);
     /// New bitrate level, permille of the codec's maximum (crate::rate).
     fn on_rate(&self, _level: u32) {}
+    /// The pairing code went to the car page at [remote] (QR pairing, [`Server::pair`]).
+    fn on_paired(&self, _remote: &str) {}
 }
 
 pub struct Options {
@@ -103,6 +105,123 @@ pub struct Server {
     rt: tokio::runtime::Runtime,
     shared: Arc<Mutex<Shared>>,
     listener: Arc<dyn Listener>,
+    pairing: Arc<Mutex<Pairing>>,
+}
+
+// ---------------------------------------------------------------- QR pairing
+//
+// Port + 1, certificate from a public name (crate::pair::CERT_NAME): any car
+// page completes the handshake at once and waits there for the phone to scan
+// its QR code, so no handshake fails while the QR is up (Chrome throttles
+// pages after failed WebTransport handshakes). The code it gets is sealed
+// with a key from the QR secret.
+
+/// Car pages waiting at once (only the car subnet can connect).
+const MAX_PAIR_WAITING: usize = 8;
+/// A page announces its tag this soon after connecting.
+const PAIR_HELLO_TIMEOUT: Duration = Duration::from_secs(10);
+/// A page waits this long for the scan, then reconnects.
+const PAIR_WAIT: Duration = Duration::from_secs(180);
+/// A scan waits this long for its page to (re)connect.
+const PAIR_OFFER: Duration = Duration::from_secs(120);
+
+struct Waiter {
+    tag: String,
+    remote: String,
+    tx: tokio::sync::oneshot::Sender<String>,
+}
+
+#[derive(Default)]
+struct Pairing {
+    waiting: Vec<Waiter>,
+    /// After a scan: the tag it is for, the sealed message, until when.
+    offer: Option<(String, String, Instant)>,
+}
+
+impl Pairing {
+    /// The scan's message for [tag], once.
+    fn take_offer(&mut self, tag: &str) -> Option<String> {
+        match &self.offer {
+            Some((t, _, until)) if t == tag && Instant::now() < *until => self.offer.take().map(|(_, m, _)| m),
+            _ => None,
+        }
+    }
+}
+
+fn paired_message(secret: &str, code: &str) -> String {
+    let mut nonce = [0u8; 12];
+    ring::rand::SecureRandom::fill(&ring::rand::SystemRandom::new(), &mut nonce).expect("randomness");
+    let s = crate::pair::seal(secret, code, nonce);
+    serde_json::json!({ "t": "paired", "nonce": s.nonce, "box": s.sealed }).to_string()
+}
+
+fn valid_tag(t: &str) -> bool {
+    t.len() == 43 && t.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+}
+
+async fn handle_pair_session(
+    incoming: IncomingSession,
+    allow: Arc<Allow>,
+    pairing: Arc<Mutex<Pairing>>,
+    listener: Arc<dyn Listener>,
+    slots: Arc<Semaphore>,
+) -> anyhow::Result<()> {
+    let ip = incoming.remote_address().ip();
+    if !allowed(&allow, ip) {
+        incoming.ignore();
+        anyhow::bail!("pairing: ignored {ip}");
+    }
+    let Ok(_slot) = slots.try_acquire_owned() else {
+        incoming.refuse();
+        anyhow::bail!("pairing: refused {ip}: too many waiting");
+    };
+    let request = tokio::time::timeout(HANDSHAKE_TIMEOUT, incoming.into_future()).await.map_err(|_| anyhow::anyhow!("pairing handshake timeout"))??;
+    if request.path() != "/pair" {
+        request.not_found().await;
+        anyhow::bail!("pairing: rejected path");
+    }
+    let conn = tokio::time::timeout(HANDSHAKE_TIMEOUT, request.accept()).await.map_err(|_| anyhow::anyhow!("pairing accept timeout"))??;
+    let remote = conn.remote_address().to_string();
+    let (mut send, tag) = tokio::time::timeout(PAIR_HELLO_TIMEOUT, async {
+        let (send, recv) = conn.accept_bi().await?;
+        let mut lines = LineReader { recv, buf: Vec::new() };
+        let line = lines.next().await?.ok_or_else(|| anyhow::anyhow!("closed before the tag"))?;
+        let v: serde_json::Value = serde_json::from_str(&line)?;
+        let tag = match (v.get("t").and_then(|t| t.as_str()), v.get("tag").and_then(|t| t.as_str())) {
+            (Some("pair"), Some(t)) if valid_tag(t) => t.to_string(),
+            _ => anyhow::bail!("not a pairing hello"),
+        };
+        anyhow::Ok((send, tag))
+    })
+    .await
+    .map_err(|_| anyhow::anyhow!("no pairing hello"))??;
+
+    // Already scanned: take it now; else wait for the scan (or give up and let the page reconnect).
+    let ready = pairing.lock().unwrap().take_offer(&tag);
+    let message = match ready {
+        Some(m) => {
+            listener.on_paired(&remote);
+            m
+        }
+        None => {
+            let (tx, rx) = tokio::sync::oneshot::channel();
+            pairing.lock().unwrap().waiting.push(Waiter { tag, remote: remote.clone(), tx });
+            match tokio::time::timeout(PAIR_WAIT, rx).await {
+                Ok(Ok(m)) => m,
+                _ => {
+                    conn.close(wtransport::VarInt::from_u32(0), b"no scan");
+                    anyhow::bail!("pairing: no scan for {remote}");
+                }
+            }
+        }
+    };
+    write_line(&mut send, &message).await?;
+    let _ = send.finish().await;
+    log::info!("pairing: code sent to {remote}");
+    // A moment for the page to read it before the connection goes.
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    conn.close(wtransport::VarInt::from_u32(0), b"paired");
+    Ok(())
 }
 
 // ---------------------------------------------------------------- backpressure
@@ -334,6 +453,29 @@ fn server_config(port: u16, code: &str) -> anyhow::Result<(ServerConfig, i64)> {
     Ok((config, c.not_before))
 }
 
+fn spawn_rotation(rt: &tokio::runtime::Runtime, endpoint: Arc<Endpoint<wtransport::endpoint::endpoint_side::Server>>, port: u16, code: String, week: i64) {
+    rt.spawn(async move {
+        let mut current = week;
+        loop {
+            tokio::time::sleep(Duration::from_secs(600)).await;
+            if cert::week_start(cert::now_unix()) == current {
+                continue;
+            }
+            let rotated = server_config(port, &code).and_then(|(cfg, w)| {
+                endpoint.reload_config(cfg, false)?;
+                Ok(w)
+            });
+            match rotated {
+                Ok(w) => {
+                    current = w;
+                    log::info!("cert rotated to week {w} on :{port}");
+                }
+                Err(e) => log::warn!("cert rotation failed on :{port}: {e}"),
+            }
+        }
+    });
+}
+
 impl Server {
     pub fn start(opts: Options, listener: Arc<dyn Listener>) -> anyhow::Result<Self> {
         let allow = Arc::new(parse_allow(&opts.allow)?);
@@ -353,35 +495,12 @@ impl Server {
 
         // Rotate the certificate when a new week starts (pages pass this and
         // last week's hash, so either keeps working).
-        {
-            let endpoint = endpoint.clone();
-            let code = opts.code.clone();
-            let port = opts.port;
-            rt.spawn(async move {
-                let mut current = week;
-                loop {
-                    tokio::time::sleep(Duration::from_secs(600)).await;
-                    if cert::week_start(cert::now_unix()) == current {
-                        continue;
-                    }
-                    let rotated = server_config(port, &code).and_then(|(cfg, w)| {
-                        endpoint.reload_config(cfg, false)?;
-                        Ok(w)
-                    });
-                    match rotated {
-                        Ok(w) => {
-                            current = w;
-                            log::info!("cert rotated to week {w}");
-                        }
-                        Err(e) => log::warn!("cert rotation failed: {e}"),
-                    }
-                }
-            });
-        }
+        spawn_rotation(&rt, endpoint.clone(), opts.port, opts.code.clone(), week);
 
         {
             let shared = shared.clone();
             let listener = listener.clone();
+            let allow = allow.clone();
             let key = Arc::new(auth_key(&opts.code));
             let pending = Arc::new(Semaphore::new(MAX_PENDING));
             rt.spawn(async move {
@@ -399,7 +518,53 @@ impl Server {
             });
         }
 
-        Ok(Server { rt, shared, listener })
+        let pairing = Arc::new(Mutex::new(Pairing::default()));
+        {
+            let (config, _) = server_config(opts.port + 1, crate::pair::CERT_NAME)?;
+            let endpoint = Arc::new(rt.block_on(async { Endpoint::server(config) })?);
+            spawn_rotation(&rt, endpoint.clone(), opts.port + 1, crate::pair::CERT_NAME.to_string(), week);
+            let (pairing, listener, allow) = (pairing.clone(), listener.clone(), allow.clone());
+            let slots = Arc::new(Semaphore::new(MAX_PAIR_WAITING));
+            rt.spawn(async move {
+                loop {
+                    let incoming = endpoint.accept().await;
+                    let (pairing, listener, allow, slots) = (pairing.clone(), listener.clone(), allow.clone(), slots.clone());
+                    tokio::spawn(async move {
+                        if let Err(e) = handle_pair_session(incoming, allow, pairing, listener, slots).await {
+                            log::info!("{e}");
+                        }
+                    });
+                }
+            });
+        }
+
+        Ok(Server { rt, shared, listener, pairing })
+    }
+
+    /**
+     * The phone scanned a car page's QR code: hand that page (waiting on the
+     * pairing port now, or arriving within [PAIR_OFFER]) the pairing [code],
+     * sealed with [secret]. Once; a new scan replaces an unclaimed one.
+     */
+    pub fn pair(&self, secret: &str, code: &str) {
+        let tag = crate::pair::tag(secret);
+        let message = paired_message(secret, code);
+        let mut p = self.pairing.lock().unwrap();
+        p.waiting.retain(|w| !w.tx.is_closed()); // pages that gave up
+        if let Some(i) = p.waiting.iter().position(|w| w.tag == tag) {
+            let w = p.waiting.remove(i);
+            p.offer = None;
+            drop(p);
+            match w.tx.send(message) {
+                Ok(()) => return self.listener.on_paired(&w.remote),
+                Err(m) => {
+                    p = self.pairing.lock().unwrap();
+                    p.offer = Some((tag, m, Instant::now() + PAIR_OFFER));
+                    return;
+                }
+            }
+        }
+        p.offer = Some((tag, message, Instant::now() + PAIR_OFFER));
     }
 
     /// Queue an encoded access unit. Returns false if it was dropped.

@@ -48,14 +48,4 @@ class BindRetryTest {
         }
         assertEquals(2, tries)
     }
-
-    @Test
-    fun handover() {
-        assertEquals(Handover.SEND_CODE, handoverAction(connected = true, handedOver = false))
-        assertEquals(Handover.CAR_LEFT, handoverAction(connected = false, handedOver = true))
-        // A car page reloading before the code went out must not end pairing.
-        assertEquals(Handover.NONE, handoverAction(connected = false, handedOver = false))
-        // A second device connecting afterwards never gets the code.
-        assertEquals(Handover.NONE, handoverAction(connected = true, handedOver = true))
-    }
 }

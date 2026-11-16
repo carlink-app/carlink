@@ -49,14 +49,12 @@ describe('Connection retry pacing', () => {
     };
   }
 
-  function hooks(retryMs?: () => number | undefined, connectTimeoutMs?: () => number | undefined): ConnectionHooks {
+  function hooks(): ConnectionHooks {
     return {
       settings: () => ({ code: 'ABCD-EFGH-JKLM', host: '9.9.0.1', port: 4433 }),
       layout: () => [],
       codecs: async () => ['h264'],
       onStatus: vi.fn(), onMessage: vi.fn(), onSession: vi.fn(), onFrame: vi.fn(), onLost: vi.fn(), onRtt: vi.fn(),
-      retryMs,
-      connectTimeoutMs,
     };
   }
 
@@ -77,19 +75,15 @@ describe('Connection retry pacing', () => {
     }
   }
 
-  it('retryMs overrides backoff', async () => {
-    expect(await attemptGaps(hooks(() => 1000), 3500)).toEqual([1000, 1000, 1000]);
+  it('backs off 1, 2, 4 ... up to 30 s', async () => {
+    expect(await attemptGaps(hooks(), 7500)).toEqual([1000, 2000, 4000]);
+    // Long outage: few failed handshakes for Chrome to count (it delays pages after many).
+    const gaps = await attemptGaps(hooks(), 300_000);
+    expect(Math.max(...gaps)).toBe(30_000);
+    expect(gaps.length).toBeLessThanOrEqual(13);
   });
 
-  it('retryMs undefined uses backoff', async () => {
-    expect(await attemptGaps(hooks(() => undefined), 7500)).toEqual([1000, 2000, 4000]);
-  });
-
-  it('connectTimeoutMs gives up on an unanswered handshake sooner', async () => {
-    expect(await attemptGaps(hooks(() => 300, () => 1500), 5500, hangingTransport)).toEqual([1800, 1800, 1800]);
-  });
-
-  it('without connectTimeoutMs an unanswered handshake waits the full 8 s', async () => {
-    expect(await attemptGaps(hooks(() => 300), 9000, hangingTransport)).toEqual([8300]);
+  it('an unanswered handshake waits the full 8 s', async () => {
+    expect(await attemptGaps(hooks(), 9200, hangingTransport)).toEqual([9000]);
   });
 });

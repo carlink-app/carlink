@@ -224,23 +224,33 @@ different week (clock off).
    verified by `/.well-known/assetlinks.json`; a link only pairs after the
    user confirms "Pair a car?", since any web page can link there). Without
    TSLink the link shows a static `/pair` page with no script. The app then
-   calls `IEngine.startPairing(secret)`: for up to
-   2 minutes the engine runs with the secret in place of the pairing code (same
-   certificate derivation and challenge/response, so the car must have seen
-   the QR code to connect).
-3. The page keeps connecting with the secret. The first authenticated session
-   gets `{"t":"paired","code":"ABCD-EFGH-JKLM"}` and nothing else is served.
-4. The page stores the code and the address it connected to and closes the
-   session; the engine goes back to the normal code as soon as that session
-   closes (at most ~1.5 s after sending the code). The page reconnects with
-   short retries (every 0.3 s, handshakes cut off after 1.5 s) for 8 s, then
-   normal backoff. While the QR code is up it retries every second.
+   calls `IEngine.startPairing(secret)`.
+3. Meanwhile the page waits on the phone's **pairing port** (normal port + 1,
+   4434): `https://<phone>:4434/pair`, pinned to a certificate made from the
+   public name `TSLINK-PAIRING` (same weekly derivation as the normal one), so
+   the handshake succeeds before any scan. Chrome remembers failed
+   WebTransport handshakes for 5 minutes and delays new ones up to 60 s; this
+   way none fail while the QR code is up. The page sends one line
+   `{"t":"pair","tag":"<tag>"}` and waits.
+4. Keys, from the secret S (both sides, nothing sent): HKDF-SHA256(ikm = S,
+   salt = `tslink-pair-v1`), info `id` and `box`, 32 bytes each.
+   tag = base64url(HMAC-SHA256(idKey, `tslink pair`)).
+5. On the scan the engine sends the page waiting under that tag (or the first
+   to arrive within 2 minutes) `{"t":"paired","nonce":"...","box":"..."}`:
+   box = base64url(AES-256-GCM(boxKey, nonce, pairing code)). Once; then the
+   phone closes. Test vectors: core/src/pair.rs, web/src/pairsession.test.ts.
+6. The page opens the box (one that doesn't open is ignored), stores the code
+   and the address, and connects to 4433 as usual. The normal engine kept
+   running throughout.
 
-The secret is exactly 20 characters from the alphabet; the phone refuses
-anything else. While pairing, the engine relays nothing but `paired` (no
-notifications, media or apps). The phone app then shows the address of the
-car that got the code: if the car didn't connect, someone else on the hotspot
-who saw the QR code may have raced it, and "Unpair all cars" (a new code) revokes it.
+Security: anyone on the hotspot can complete TLS on the pairing port and even
+sit in the middle, but without the secret (only ever on the car's screen) can
+neither read the code nor make the page accept a forged one; a replayed tag
+gets a box it can't open. The port serves nothing but sealed codes, only to
+the car subnet, at most 8 waiting pages, each for at most 3 minutes. The phone
+app shows the address that got the code: if the car didn't connect, someone
+else who saw the QR code may have raced it, and "Unpair all cars" (a new code)
+revokes it.
 
 Typing the code on the page stays available ("Type the code instead").
 
