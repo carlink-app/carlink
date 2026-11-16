@@ -25,6 +25,9 @@ class EngineService : IEngine.Stub() {
     override fun start(code: String, port: Int, libPath: String, devAllow: String): String {
         if (!fromTSLink()) return "denied"
         if (engine != null) return "already running"
+        // Shizuku started with root: Android refuses the car display to uid 0
+        // with the shell's identity ("packageName must match the calling uid").
+        if (android.os.Process.myUid() == 0) return ROOT_ERROR
         return try {
             // Our own installed library, never a caller-supplied path (this runs as shell).
             val dir = Shell.context.packageManager.getApplicationInfo(APP_PACKAGE, 0).nativeLibraryDir
@@ -91,6 +94,7 @@ class EngineService : IEngine.Stub() {
         if (!fromTSLink()) return "denied"
         // Encoders are a limited resource: don't take them from a car session.
         if (engine?.status?.startsWith("car connected") == true) return "error: disconnect the car first"
+        if (android.os.Process.myUid() == 0) return ROOT_ERROR
         return try {
             Shell.init()
             SelfTest.run().toString(2)
@@ -196,6 +200,8 @@ class EngineService : IEngine.Stub() {
 
     private companion object {
         const val PAIRING_MS = 120_000L
+        const val ROOT_ERROR = "error: Shizuku is running with root. TSLink needs it started without root: " +
+            "stop Shizuku, then start it with Wireless debugging (or USB) instead of root."
     }
 }
 

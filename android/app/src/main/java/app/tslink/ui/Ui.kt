@@ -134,19 +134,30 @@ class Ui(private val ctx: Context) {
     }
 
     /** The screen: [content] scrolling, edge to edge (always on with targetSdk 36) but clear of the system bars. */
-    fun screen(window: Window, content: View): ScrollView {
+    /**
+     * Edge-to-edge scrolling screen. A bar the colour of the window sits under
+     * the status bar, so content scrolling up doesn't show through it.
+     */
+    fun screen(window: Window, content: View): View {
         val scroll = ScrollView(ctx).apply {
             clipToPadding = false
             addView(content, MATCH_PARENT, WRAP_CONTENT)
         }
         window.setDecorFitsSystemWindows(false)
+        val bg = (window.decorView.background as? android.graphics.drawable.ColorDrawable)?.color ?: Color.parseColor("#121212")
+        val scrim = View(ctx).apply { setBackgroundColor(bg) }
+        val root = android.widget.FrameLayout(ctx).apply {
+            addView(scroll, MATCH_PARENT, MATCH_PARENT)
+            addView(scrim, android.widget.FrameLayout.LayoutParams(MATCH_PARENT, 0))
+        }
         val pad = dp(16)
-        scroll.setOnApplyWindowInsetsListener { v, insets ->
+        root.setOnApplyWindowInsetsListener { _, insets ->
             val bars = insets.getInsets(WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout())
-            v.setPadding(pad + bars.left, pad + bars.top, pad + bars.right, pad + bars.bottom)
+            scroll.setPadding(pad + bars.left, pad + bars.top, pad + bars.right, pad + bars.bottom)
+            scrim.layoutParams = scrim.layoutParams.apply { height = bars.top }
             insets
         }
-        return scroll
+        return root
     }
 
     /** Coloured status dot. */

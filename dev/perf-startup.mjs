@@ -4,7 +4,7 @@
 // handling time, main-thread long tasks, and fps per second.
 //
 // Usage: TSLINK_CODE=XXXX-XXXX-XXXX node dev/perf-startup.mjs --host 192.168.x.y
-//          [--page http://127.0.0.1:4173/] [--seconds 12] [--cpu 4] [--app Waze]
+//          [--port 4433] [--page http://127.0.0.1:4173/] [--seconds 12] [--cpu 4] [--app Waze]
 // The pairing code is a secret: it comes from the environment, not the command
 // line (visible to other local users), and the temporary browser profile is
 // deleted afterwards.
@@ -48,7 +48,7 @@ await send('Page.addScriptToEvaluateOnNewDocument', { source: `
   window.__long = [];
   new PerformanceObserver((l) => { for (const e of l.getEntries()) window.__long.push([Math.round(e.startTime), Math.round(e.duration)]); })
     .observe({ type: 'longtask', buffered: true });` });
-await send('Page.navigate', { url: `${page}?debug=1#code=${encodeURIComponent(code)}&host=${encodeURIComponent(host)}&port=4433` });
+await send('Page.navigate', { url: `${page}?debug=1#code=${encodeURIComponent(code)}&host=${encodeURIComponent(host)}&port=${args.port ?? 4433}` });
 
 // Open an app from the launcher if nothing is showing (a fresh engine has an
 // empty car display, and an empty display sends no frames).
