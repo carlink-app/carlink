@@ -41,7 +41,7 @@ const FLOOD_PER_SEC: u32 = 4 * MAX_CONTROL_PER_SEC;
 /// Messages that make the phone start a process or do real work (`am`
 /// launches, task removal, the app list): far more than a driver can tap.
 const MAX_HEAVY_PER_SEC: u32 = 20;
-const HEAVY_TYPES: &[&str] = &["launch", "close", "close-all", "apps", "key", "notif-open", "app-icons"];
+const HEAVY_TYPES: &[&str] = &["launch", "close", "close-all", "apps", "key", "notif-open", "app-icons", "media-cmd"];
 
 /// How a control message counts against the per-second budgets.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -61,7 +61,7 @@ const KEYFRAME_REQUEST_INTERVAL: Duration = Duration::from_millis(250);
 const AUTH_KEY_LABEL: &str = "carlink-auth-key-v1:";
 const AUTH_MAC_LABEL: &[u8] = b"carlink-auth-v1|";
 /// Control message types the page may send (anything else closes the session).
-const CONTROL_TYPES: &[&str] = &["hello", "layout", "apps", "launch", "touch", "key", "keyframe", "notif-open", "close", "close-all", "app-icons"];
+const CONTROL_TYPES: &[&str] = &["hello", "layout", "apps", "launch", "touch", "key", "keyframe", "notif-open", "close", "close-all", "app-icons", "media-cmd"];
 
 /// Callbacks into the app (implemented over JNI in lib.rs).
 pub trait Listener: Send + Sync + 'static {
@@ -705,7 +705,7 @@ mod tests {
     #[test]
     fn control_validation_types() {
         // Every page->phone type in PROTOCOL.md passes, including milestone 3's notif-open.
-        for t in ["hello", "layout", "apps", "launch", "touch", "key", "keyframe", "notif-open", "close", "close-all", "app-icons"] {
+        for t in ["hello", "layout", "apps", "launch", "touch", "key", "keyframe", "notif-open", "close", "close-all", "app-icons", "media-cmd"] {
             assert!(validate_control(&format!(r#"{{"t":"{t}"}}"#)).is_some(), "{t}");
         }
         let (open, _) = validate_control(r#"{"t":"notif-open","id":"n3f9a1c"}"#).unwrap();

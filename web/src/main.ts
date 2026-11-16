@@ -421,8 +421,8 @@ function showMedia(on: boolean) {
   if (on) { mediaShownAt = performance.now(); showTray(false); renderMedia(); }
 }
 
-function mediaCmd(a: 'play' | 'pause' | 'next' | 'prev') {
-  if (performance.now() - mediaShownAt < TAP_GUARD_MS) return;
+function mediaCmd(a: 'play' | 'pause' | 'next' | 'prev', fromClose = false) {
+  if (!fromClose && performance.now() - mediaShownAt < TAP_GUARD_MS) return;
   send({ t: 'media-cmd', a });
   // Feels instant; the phone's next update confirms (or corrects) it.
   if (nowPlaying && (a === 'play' || a === 'pause')) setMedia({ ...nowPlaying, playing: a === 'play' });
@@ -920,6 +920,9 @@ function setRecents(list: AppInfo[]) {
  * goes, so the car never sees what happens to be underneath.
  */
 function closeApp(pkg: string) {
+  // Closing an app doesn't stop its music (Android keeps the player service):
+  // closing the one that plays means "stop it".
+  if (nowPlaying?.pkg === pkg && nowPlaying.playing) mediaCmd('pause', true);
   const r = afterClose(recents, current, pkg);
   if (r.next) {
     send({ t: 'launch', pane: 0, pkg: r.next.pkg, cls: r.next.cls });
