@@ -33,7 +33,7 @@ const AUTH_STEP_TIMEOUT_MS = 5000;
 const DEAD_MS = 4000;
 const BACKOFF_MIN_MS = 1000;
 const BACKOFF_MAX_MS = 5000;
-const REJECTED = 'Pairing code rejected';
+export const REJECTED = 'Pairing code rejected';
 export const NO_WEBTRANSPORT = 'This browser has no WebTransport, so TSLink can\'t connect here';
 
 const enc = new TextEncoder();
