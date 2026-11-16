@@ -118,7 +118,7 @@ Page -> phone:
 - `layout.dpi`: biggest UI that keeps apps in tablet layout (shortest side ~640 dp, 200-260 x devicePixelRatio);
   a change re-creates the pane (apps re-layout for the new density).
 - `layout`: the page decides pane sizes (main area = screen minus the app
-  rail). Width and height must be even. The phone (re)creates one virtual
+  sidebar). Width and height must be even. The phone (re)creates one virtual
   display + encoder per pane.
 
 Phone -> page:

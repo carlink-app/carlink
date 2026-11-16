@@ -14,7 +14,7 @@ export const MAX_PKG = 255;
 /** Pop-up banners besides ringing calls: one, so the map stays visible. */
 export const MAX_VISIBLE = 1;
 export const AUTO_HIDE_MS = 6000;
-/** Notifications kept in the tray (behind the rail's bell) until opened or dismissed. */
+/** Notifications kept in the tray (behind the sidebar's bell) until opened or dismissed. */
 export const MAX_TRAY = 20;
 
 export interface Notif {
@@ -98,7 +98,7 @@ export function addToTray(list: readonly Notif[], n: Notif): Notif[] {
   return n.kind === 'call' ? rest : [n, ...rest].slice(0, MAX_TRAY);
 }
 
-/** The rail's tray badge: the count, capped at "9+". */
+/** The sidebar's tray badge: the count, capped at "9+". */
 export const trayBadge = (count: number): string => (count > 9 ? '9+' : String(count));
 
 /** The "+N" chip on a banner: tray entries other than the banner itself. */

@@ -48,9 +48,9 @@ car's Bluetooth, as usual.
     `cert ... fp` should match the `cert` in the phone's status.
 12. Try each of these and note the overlay numbers (codec, fps, decode, rtt, rate):
     - Maps / Waze / ABRP: tap, drag to pan, Back
-    - Now playing: start music on the phone; the rail shows it; play/pause,
+    - Now playing: start music on the phone; the sidebar shows it; play/pause,
       next, previous from the card
-    - Long-press an app: Pin to rail; search in the launcher
+    - Long-press an app: Pin to sidebar; search in the launcher
     - the browser's expand button (bigger area; the UI size adapts)
     - leaving the screen untouched for 5+ min (the picture must stay live)
     - locking the phone for 2 min

@@ -31,7 +31,7 @@ export function paneDpi(w: number, h: number, dpr: number): number {
   return Math.min(DPI_MAX, Math.max(DPI_MIN, Math.round(dpi)));
 }
 
-/** Page UI scale (--ui in style.css): keep the rail and menus about the size they have at 1x. */
+/** Page UI scale (--ui in style.css): keep the sidebar and menus about the size they have at 1x. */
 export const uiScale = (dpr: number): number => Math.min(1, Math.max(0.6, 1.15 / (dpr || 1)));
 
 /**

@@ -1,6 +1,6 @@
 # TSLink web (car side)
 
-The page that runs in the Tesla browser: Android Auto–style rail + one pane
+The page that runs in the Tesla browser: Android Auto–style sidebar + one pane
 showing the phone's apps, streamed over WebTransport (see
 `../docs/PROTOCOL.md`). Vite + TypeScript, no UI framework.
 
@@ -32,16 +32,16 @@ If HEVC decoding fails repeatedly (3 errors within 10 s), the page reconnects
 offering only H.264 for the rest of the page session ("Switched to H.264").
 
 Settings (code/host/port) are otherwise entered on the pairing screen (gear
-icon in the rail) and kept in `localStorage`. A saved code is never shown
+icon in the sidebar) and kept in `localStorage`. A saved code is never shown
 again: the field is empty with a masked placeholder (`••••-••••-XY7Q`), and
 saving with it empty keeps the saved code. Defaults: `9.9.0.1:4433`. The
 same screen has a Display setting (whether notification banners show message
 text); it applies and saves on tap, without reconnecting. The phone's UI size
 is automatic: the biggest that keeps apps in their wide layout (`paneDpi`).
 
-Rail and launcher: long-press (500 ms, holding still) an app tile, or an app
-on the rail, for Open / Pin to rail / Unpin. Up to 5 pinned apps stay at the
-top of the rail (`tslink.pins`), above the recents (which skip pinned apps);
+Sidebar and launcher: long-press (500 ms, holding still) an app tile, or an app
+on the sidebar, for Open / Pin to sidebar / Unpin. Up to 5 pinned apps stay at the
+top of the sidebar (`tslink.pins`), above the recents (which skip pinned apps);
 a dot under a pinned app means it's running. The launcher has a search field
 (label, case and accents ignored) that shows a flat, sorted list instead of
 the category groups.
@@ -109,7 +109,7 @@ the fake apps and banners.)
 
 | file | |
 |---|---|
-| `src/main.ts` | UI: rail (pins + recents), launcher (search, A–Z), connection help, banners, pairing + display settings, debug overlay, layout messages |
+| `src/main.ts` | UI: sidebar (pins + recents), launcher (search, A–Z), connection help, banners, pairing + display settings, debug overlay, layout messages |
 | `src/connection.ts` | WebTransport session, auth handshake, control stream, pings/RTT, reconnect loop |
 | `src/auth.ts` | control-stream auth MAC (HMAC-SHA256 over the phone's nonce) |
 | `src/reorder.ts` | per-pane frame sequencing: reorder, sync to keyframes, gaps, seq wraparound |
@@ -118,9 +118,9 @@ the fake apps and banners.)
 | `src/cert.ts` | deterministic certificate hash from the pairing code (matches `core/src/cert.rs`) |
 | `src/touch.ts` | pointer events -> `touch` messages, ripple |
 | `src/h26x.ts` | Annex B parsing, codec string from SPS |
-| `src/pins.ts` | apps pinned to the rail: storage parsing, pin/unpin, recents without the pinned |
+| `src/pins.ts` | apps pinned to the sidebar: storage parsing, pin/unpin, recents without the pinned |
 | `src/search.ts` | launcher search: label filter |
-| `src/longpress.ts` | long press on a tile/rail app (opens the pin sheet), swallowing the lift's click |
+| `src/longpress.ts` | long press on a tile/sidebar app (opens the pin sheet), swallowing the lift's click |
 | `src/help.ts` | connection help panel: error status -> what to check |
 | `src/notifs.ts` | notification banners: validation/truncation of `notif`, banner queue and expiry |
 | `src/diag.ts` | pure helpers: code masking, cert fingerprint, HEVC error window, debug log ring |

@@ -11,7 +11,7 @@
   --err: #f28b82;
   --state: var(--muted);
   /* Page UI scale, set from devicePixelRatio (main.ts): the Tesla browser zooms
-     pages by ~1.5, which made the rail, launcher and banners oversized. */
+     pages by ~1.5, which made the sidebar, launcher and banners oversized. */
   --ui: 1;
   color-scheme: dark;
 }
@@ -28,7 +28,7 @@ svg { fill: currentColor; }
 
 #app { position: fixed; inset: 0; display: flex; }
 
-/* ---- rail ---- */
+/* ---- sidebar ---- */
 #rail {
   position: relative; z-index: 3; /* the close-all label overlaps the main area */
   flex: 0 0 var(--rail-w); width: var(--rail-w); background: var(--rail-bg);
@@ -55,16 +55,13 @@ svg { fill: currentColor; }
 .recent .ph { width: 56px; height: 56px; border-radius: 28px; background: #3c4043; display: grid; place-items: center; font-size: 28px; font-weight: 700; }
 .recent img { width: 56px; height: 56px; border-radius: 28px; object-fit: cover; }
 .recent.current { background: #ffffff1a; }
-/* Close: tap the front app again, then the ×. Icons shrink away when closed. */
+/* Closed icons shrink away. */
 .recent { position: relative; transition: background .1s, transform .18s ease-in, opacity .18s ease-in; }
 .recent.leaving { transform: scale(.4); opacity: 0; }
-.close-badge {
-  position: absolute; inset: 4px; border-radius: 50%; display: grid; place-items: center;
-  background: #000000b3; color: var(--err); opacity: 0; transform: scale(.6); pointer-events: none;
-  transition: opacity .15s, transform .15s;
-}
-.close-badge svg { width: 36px; height: 36px; }
-.recent.armed .close-badge { opacity: 1; transform: none; }
+/* Pinned: hold, then drag to reorder (the sidebar doesn't scroll from a pin). */
+.recent.pinned { touch-action: none; }
+.recent.lifted { background: #ffffff2a; transform: scale(1.12); }
+.recent.dragging { z-index: 2; transition: none; box-shadow: 0 6px 20px #000c; }
 #btn-closeall[hidden] { display: none; }
 #btn-closeall { position: relative; }
 .closeall-label {
@@ -78,7 +75,7 @@ svg { fill: currentColor; }
   flex: none; width: 88px; padding: 12px 0 8px; display: flex; flex-direction: column; align-items: center; gap: 6px;
   font-size: 26px; font-weight: 500; font-variant-numeric: tabular-nums;
 }
-/* Connection state colour, shared by the rail dot and the status pill. */
+/* Connection state colour, shared by the sidebar dot and the status pill. */
 .connecting { --state: var(--warn); }
 .connected { --state: var(--ok); }
 .error { --state: var(--err); }
@@ -230,7 +227,7 @@ svg { fill: currentColor; }
 .notif-close { flex: none; width: 96px; display: grid; place-items: center; color: var(--muted); }
 .notif-close svg { width: 44px; height: 44px; }
 
-/* ---- notification tray (bell on the rail) ---- */
+/* ---- notification tray (bell on the sidebar) ---- */
 #btn-tray { position: relative; }
 #btn-tray[hidden] { display: none; }
 #tray-count {
@@ -321,6 +318,8 @@ svg { fill: currentColor; }
 #sheet-label { font-size: 30px; font-weight: 500; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sheet-card button { min-height: 80px; border-radius: 40px; font-size: 26px; font-weight: 500; background: #ffffff14; }
 .sheet-card button:active { background: #ffffff2a; }
+.sheet-card .danger { color: var(--err); }
+#sheet-close[hidden] { display: none; }
 .sheet-card button:disabled { color: var(--muted); cursor: default; }
 #sheet-pin:not(:disabled) { background: var(--accent); color: #000; }
 

@@ -1,4 +1,4 @@
-// Apps pinned to the rail (like a dock): list operations and storage parsing; no DOM here.
+// Apps pinned to the sidebar (like a dock): list operations and storage parsing; no DOM here.
 import type { AppInfo } from './protocol';
 
 export const MAX_PINS = 5;
@@ -24,7 +24,7 @@ export function parsePins(raw: string | null): AppInfo[] {
 
 export const isPinned = (pins: readonly AppInfo[], a: AppInfo): boolean => pins.some((p) => same(p, a));
 
-/** Pins with [a] added at the end; null if the rail is full. Already pinned: unchanged. */
+/** Pins with [a] added at the end; null if the sidebar is full. Already pinned: unchanged. */
 export function addPin(pins: readonly AppInfo[], a: AppInfo, max = MAX_PINS): AppInfo[] | null {
   if (isPinned(pins, a)) return [...pins];
   if (pins.length >= max) return null;
@@ -33,6 +33,18 @@ export function addPin(pins: readonly AppInfo[], a: AppInfo, max = MAX_PINS): Ap
 
 export const removePin = (pins: readonly AppInfo[], a: AppInfo): AppInfo[] => pins.filter((p) => !same(p, a));
 
-/** Recents to show on the rail: the pinned ones are already there. */
+/** Recents to show in the sidebar: the pinned ones are already there. */
 export const unpinnedRecents = (recents: readonly AppInfo[], pins: readonly AppInfo[]): AppInfo[] =>
   recents.filter((r) => !isPinned(pins, r));
+
+/** Pins with the one at [from] moved to [to] (both clamped). */
+export function movePin(pins: readonly AppInfo[], from: number, to: number): AppInfo[] {
+  const out = [...pins];
+  if (from < 0 || from >= out.length) return out;
+  const [a] = out.splice(from, 1);
+  out.splice(Math.max(0, Math.min(to, out.length)), 0, a);
+  return out;
+}
+
+/** Where a dragged pin lands: the number of the other pins whose centre is above [y]. */
+export const dropIndex = (otherCentres: readonly number[], y: number): number => otherCentres.filter((c) => c < y).length;

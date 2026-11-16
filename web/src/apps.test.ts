@@ -45,10 +45,10 @@ describe('groupApps edge cases', () => {
 });
 
 describe('afterClose', () => {
-  const rail = [app('maps', 'Maps'), app('waze', 'Waze'), app('tg', 'Telegram')];
+  const sidebar = [app('maps', 'Maps'), app('waze', 'Waze'), app('tg', 'Telegram')];
 
-  it('closing the front app moves to the next one on the rail', () => {
-    const r = afterClose(rail, 'maps', 'maps');
+  it('closing the front app moves to the next one on the sidebar', () => {
+    const r = afterClose(sidebar, 'maps', 'maps');
     expect(r.recents.map((a) => a.pkg)).toEqual(['waze', 'tg']);
     expect(r).toMatchObject({ wasCurrent: true, next: { pkg: 'waze' } });
   });
@@ -59,31 +59,31 @@ describe('afterClose', () => {
   });
 
   it('closing a background app keeps the front one', () => {
-    const r = afterClose(rail, 'maps', 'tg');
+    const r = afterClose(sidebar, 'maps', 'tg');
     expect(r.recents.map((a) => a.pkg)).toEqual(['maps', 'waze']);
     expect(r).toMatchObject({ wasCurrent: false, next: null });
   });
 });
 
 describe('afterClose edge cases', () => {
-  const rail = [app('maps', 'Maps'), app('waze', 'Waze')];
+  const sidebar = [app('maps', 'Maps'), app('waze', 'Waze')];
 
-  it('nothing in front (launcher showing): rail shrinks, front unchanged', () => {
-    expect(afterClose(rail, null, 'maps')).toEqual({ recents: [rail[1]], wasCurrent: false, next: null });
+  it('nothing in front (launcher showing): sidebar shrinks, front unchanged', () => {
+    expect(afterClose(sidebar, null, 'maps')).toEqual({ recents: [sidebar[1]], wasCurrent: false, next: null });
   });
 
-  it('closing an app not on the rail changes nothing but still reports the front', () => {
-    const r = afterClose(rail, 'waze', 'spotify');
-    expect(r.recents).toEqual(rail);
+  it('closing an app not on the sidebar changes nothing but still reports the front', () => {
+    const r = afterClose(sidebar, 'waze', 'spotify');
+    expect(r.recents).toEqual(sidebar);
     expect(r).toMatchObject({ wasCurrent: false, next: null });
   });
 
-  it('front app that was not on the rail: next is the rail head', () => {
-    const r = afterClose(rail, 'tg', 'tg');
+  it('front app that was not on the sidebar: next is the sidebar head', () => {
+    const r = afterClose(sidebar, 'tg', 'tg');
     expect(r).toMatchObject({ wasCurrent: true, next: { pkg: 'maps' } });
   });
 
-  it('drops every rail entry of the package (several activities) and does not mutate the input', () => {
+  it('drops every sidebar entry of the package (several activities) and does not mutate the input', () => {
     const multi = [app('maps', 'Maps'), { ...app('maps', 'Maps'), cls: 'maps.Other' }, app('waze', 'Waze')];
     const r = afterClose(multi, 'maps', 'maps');
     expect(r.recents.map((a) => a.pkg)).toEqual(['waze']);

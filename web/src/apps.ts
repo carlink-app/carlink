@@ -1,4 +1,4 @@
-// Launcher grouping and rail (recents) bookkeeping; no DOM here.
+// Launcher grouping and sidebar (recents) bookkeeping; no DOM here.
 import type { AppInfo, AppCategory } from './protocol';
 
 /** Launcher order: what you need while driving first. */
@@ -26,8 +26,8 @@ export function groupApps(list: readonly AppInfo[]): { cat: AppCategory; title: 
 }
 
 /**
- * Rail after closing [pkg], and what to show next: if the closed app was in
- * front, the next one on the rail (most recent first), else nothing changes
+ * Sidebar after closing [pkg], and what to show next: if the closed app was in
+ * front, the next one on the sidebar (most recent first), else nothing changes
  * in front. `next` null with `wasCurrent` = no apps left, show the launcher.
  */
 export function afterClose(recents: readonly AppInfo[], current: string | null, pkg: string):

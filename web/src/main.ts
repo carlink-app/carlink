@@ -1,4 +1,4 @@
-// Main thread: UI (rail, launcher, pairing), connection, touch, debug overlay.
+// Main thread: UI (sidebar, launcher, pairing), connection, touch, debug overlay.
 // Video bytes are handed to the decode worker untouched.
 
 import './style.css';
@@ -12,8 +12,8 @@ import { afterClose, groupApps, refreshRecents } from './apps';
 import { parseMedia, subtitle, type NowPlaying } from './media';
 import { drawQr, newSecret, pairedCode, qrModules, qrText } from './pairing';
 import { errorText, helpFor } from './help';
-import { attachLongPress } from './longpress';
-import { addPin, isPinned, MAX_PINS, parsePins, PINS_KEY, removePin, unpinnedRecents } from './pins';
+import { attachLongPress, LONG_PRESS_MS, LONG_PRESS_SLOP } from './longpress';
+import { addPin, dropIndex, isPinned, MAX_PINS, movePin, parsePins, PINS_KEY, removePin, unpinnedRecents } from './pins';
 import { filterApps } from './search';
 import { acceptIcons, applyCache, chunkByBytes, ICON_REQUEST_BYTES, loadIcons, MAX_CACHED, saveIcons, validIcon, type CachedIcon } from './iconcache';
 import {
@@ -28,7 +28,7 @@ const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getEleme
 const params = new URLSearchParams(location.search);
 const DEMO = params.get('demo') === '1';
 const MAX_RECENTS = 5;
-/** Time for a closed app's rail icon to shrink away (.recent.leaving) before it's dropped. */
+/** Time for a closed app's sidebar icon to shrink away (.recent.leaving) before it's dropped. */
 const LEAVE_MS = 180;
 let debugOn = params.get('debug') === '1';
 /** Build id (`vite.config.ts`): "YYMMDD-HHMM-<content hash>", or "dev". */
@@ -684,7 +684,7 @@ function onIcons(list: { pkg: string; ih: string; icon: string }[]) {
 let apps: AppInfo[] = [];
 let current: string | null = null;
 let recents: AppInfo[] = loadRecents();
-/** Apps pinned to the top of the rail (shown there whether running or not). */
+/** Apps pinned to the top of the sidebar (shown there whether running or not). */
 let pins: AppInfo[] = loadPins();
 
 function loadPins(): AppInfo[] {
@@ -794,7 +794,7 @@ $('search').addEventListener('input', () => setQuery($<HTMLInputElement>('search
 $('search').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('search').blur(); });
 $('search-clear').addEventListener('click', () => { setQuery(''); $('search').blur(); });
 
-// ---------- app actions (long press on a launcher tile or a rail app) ----------
+// ---------- app actions (long press on a launcher tile or a sidebar app) ----------
 
 let sheetApp: AppInfo | null = null;
 let sheetShownAt = 0;
@@ -807,10 +807,11 @@ function openSheet(a: AppInfo) {
   const pinned = isPinned(pins, a);
   const full = !pinned && pins.length >= MAX_PINS;
   const pin = $<HTMLButtonElement>('sheet-pin');
-  if (pinned) pin.textContent = 'Unpin from rail';
-  else if (full) pin.textContent = `Rail full (${MAX_PINS}): unpin one first`;
-  else pin.textContent = 'Pin to rail';
+  if (pinned) pin.textContent = 'Unpin from sidebar';
+  else if (full) pin.textContent = `Sidebar full (${MAX_PINS}): unpin one first`;
+  else pin.textContent = 'Pin to sidebar';
   pin.disabled = full;
+  $('sheet-close').hidden = !recents.some((r) => r.pkg === a.pkg); // only running apps
   $('sheet').hidden = false;
 }
 
@@ -834,8 +835,9 @@ $('sheet-open').addEventListener('click', sheetAction((a) => launch(a)));
 $('sheet-pin').addEventListener('click', sheetAction((a) => {
   if (isPinned(pins, a)) { setPins(removePin(pins, a)); return; }
   const next = addPin(pins, a);
-  if (next) { setPins(next); toast(`${a.label || a.pkg} pinned to the rail`); }
+  if (next) { setPins(next); toast(`${a.label || a.pkg} pinned to the sidebar`); }
 }));
+$('sheet-close').addEventListener('click', sheetAction((a) => closeApp(a.pkg)));
 $('sheet-cancel').addEventListener('click', sheetAction(() => {}));
 // A tap beside the card closes it.
 $('sheet').addEventListener('click', (e) => {
@@ -867,7 +869,7 @@ function setRecents(list: AppInfo[]) {
 }
 
 /**
- * Close one app: the rail moves on to the next app (already running, so it's
+ * Close one app: the sidebar moves on to the next app (already running, so it's
  * instant) or the launcher. The next app is brought up before the closed one
  * goes, so the car never sees what happens to be underneath.
  */
@@ -885,12 +887,12 @@ function closeApp(pkg: string) {
   disarm();
   $('recents').querySelectorAll<HTMLElement>('.recent').forEach((el) => {
     el.classList.toggle('current', el.dataset.pkg === current);
-    // A pinned app stays on the rail, just no longer running.
+    // A pinned app stays on the sidebar, just no longer running.
     if (el.dataset.pkg !== pkg) return;
     if (el.classList.contains('pinned')) el.classList.remove('running');
     else el.classList.add('leaving');
   });
-  // Re-launched within the animation? Then it stays on the rail.
+  // Re-launched within the animation? Then it stays on the sidebar.
   setTimeout(() => setRecents(recents.filter((a) => a.pkg !== pkg || a.pkg === current)), LEAVE_MS);
 }
 
@@ -902,8 +904,8 @@ function closeAll() {
   setTimeout(() => setRecents([]), LEAVE_MS);
 }
 
-// Destructive rail actions take two taps: the first arms (shows ×), the second acts.
-let armed: string | null = null; // package, or '*' for close-all
+// Close all takes two taps: the first arms it, the second acts.
+let armed: string | null = null; // '*' while close-all is armed
 let armTimer = 0;
 function arm(what: string) {
   armed = what;
@@ -917,18 +919,17 @@ function disarm() {
   renderArmed();
 }
 function renderArmed() {
-  $('recents').querySelectorAll<HTMLElement>('.recent').forEach((el) => el.classList.toggle('armed', el.dataset.pkg === armed));
   $('btn-closeall').classList.toggle('armed', armed === '*');
 }
 
-/** Rail apps: the pinned ones on top, then recents that aren't pinned. */
+/** Sidebar apps: the pinned ones on top, a line, then recents that aren't pinned. */
 function renderRecents() {
   const rest = unpinnedRecents(recents, pins);
   const divider = document.createElement('div');
   divider.className = 'rail-divider';
   $('recents').replaceChildren(
     ...pins.map((a) => railApp(a, true)),
-    ...(pins.length && rest.length ? [divider] : []),
+    ...(pins.length ? [divider] : []),
     ...rest.map((a) => railApp(a, false)),
   );
   $('btn-closeall').hidden = recents.length === 0;
@@ -941,18 +942,69 @@ function railApp(a: AppInfo, pinned: boolean): HTMLButtonElement {
   b.className = 'rail-btn recent' + (pinned ? ' pinned' : '') + (pinned && running ? ' running' : '') + (a.pkg === current ? ' current' : '');
   b.dataset.pkg = a.pkg;
   b.setAttribute('aria-label', pinned ? `${a.label} (pinned)` : a.label);
-  const x = document.createElement('span');
-  x.className = 'close-badge';
-  x.appendChild(closeIcon());
-  b.append(appIcon(a), x);
-  attachLongPress(b, () => { disarm(); openSheet(a); });
-  b.addEventListener('click', () => {
-    if (armed === a.pkg) closeApp(a.pkg);
-    // Tapping the app already in front again offers to close it.
-    else if (a.pkg === current && !launcherOn) arm(a.pkg);
-    else launch(a);
-  });
+  b.append(appIcon(a));
+  // Hold for the menu (open, pin, close); pinned apps can also be dragged after the hold.
+  if (pinned) attachPinDrag(b, a);
+  else attachLongPress(b, () => { disarm(); openSheet(a); });
+  b.addEventListener('click', () => launch(a));
   return b;
+}
+
+/**
+ * Pinned app in the sidebar: hold LONG_PRESS_MS, then either lift (the menu)
+ * or drag up/down to reorder. Moving before the hold is a plain cancel.
+ */
+function attachPinDrag(b: HTMLButtonElement, a: AppInfo) {
+  let timer = 0;
+  let start: { y: number; id: number } | null = null;
+  let lifted = false;
+  let dragging = false;
+  let swallowClick = false;
+  const others = () => [...$('recents').querySelectorAll<HTMLElement>('.recent.pinned')].filter((el) => el !== b);
+  const reset = () => {
+    clearTimeout(timer);
+    start = null;
+    lifted = dragging = false;
+    b.classList.remove('lifted', 'dragging');
+    b.style.transform = '';
+  };
+  b.addEventListener('pointerdown', (e) => {
+    if (start) { reset(); return; } // second finger
+    start = { y: e.clientY, id: e.pointerId };
+    timer = window.setTimeout(() => {
+      lifted = true;
+      b.classList.add('lifted');
+      try { b.setPointerCapture(e.pointerId); } catch { /* pointer gone */ }
+    }, LONG_PRESS_MS);
+  });
+  b.addEventListener('pointermove', (e) => {
+    if (!start || e.pointerId !== start.id) return;
+    const dy = e.clientY - start.y;
+    if (!lifted) { if (Math.abs(dy) > LONG_PRESS_SLOP) reset(); return; }
+    if (!dragging && Math.abs(dy) > LONG_PRESS_SLOP) { dragging = true; b.classList.add('dragging'); }
+    if (dragging) b.style.transform = `translateY(${dy}px) scale(1.12)`;
+  });
+  b.addEventListener('pointerup', (e) => {
+    if (!start || e.pointerId !== start.id) return;
+    const wasLifted = lifted;
+    const wasDragging = dragging;
+    const centres = others().map((el) => { const r = el.getBoundingClientRect(); return r.top + r.height / 2; });
+    reset();
+    if (!wasLifted) return; // a tap: the click launches
+    swallowClick = true;
+    if (!wasDragging) { disarm(); openSheet(a); return; }
+    const from = pins.findIndex((p) => p.pkg === a.pkg && p.cls === a.cls);
+    const to = dropIndex(centres, e.clientY);
+    if (from >= 0 && to !== from) setPins(movePin(pins, from, to));
+  });
+  b.addEventListener('pointercancel', reset);
+  b.addEventListener('click', (e) => {
+    if (!swallowClick) return;
+    swallowClick = false;
+    e.stopImmediatePropagation();
+    e.preventDefault();
+  }, { capture: true });
+  b.addEventListener('contextmenu', (e) => e.preventDefault());
 }
 
 let launcherOn = false;
