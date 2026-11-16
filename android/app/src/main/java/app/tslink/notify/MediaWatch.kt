@@ -5,6 +5,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.media.MediaMetadata
 import android.media.session.MediaController
+import android.media.session.MediaSession
 import android.media.session.MediaSessionManager
 import android.media.session.PlaybackState
 import android.os.Handler
@@ -38,10 +39,33 @@ class MediaWatch(
     private val encoder = Executors.newSingleThreadExecutor()
 
     private val sessions = MediaSessionManager.OnActiveSessionsChangedListener { pick(it.orEmpty()) }
-    private val callback = object : MediaController.Callback() {
-        override fun onPlaybackStateChanged(state: PlaybackState?) = report()
-        override fun onMetadataChanged(metadata: MediaMetadata?) = report()
+    /**
+     * A callback on every active session, not just the followed one: Android
+     * reports a session appearing, not it starting to play, so a player that
+     * starts later (Spotify reopened while an idle Signal session was followed)
+     * would never be noticed.
+     */
+    private val watched = HashMap<MediaSession.Token, Pair<MediaController, MediaController.Callback>>()
+
+    private fun callbackFor(token: MediaSession.Token) = object : MediaController.Callback() {
+        override fun onPlaybackStateChanged(state: PlaybackState?) {
+            if (token == current?.sessionToken) report()
+            else if (state?.state == PlaybackState.STATE_PLAYING) pick(controllers()) // another one started: follow it
+        }
+        override fun onMetadataChanged(metadata: MediaMetadata?) { if (token == current?.sessionToken) report() }
         override fun onSessionDestroyed() = pick(controllers())
+    }
+
+    /** Callbacks on exactly the sessions in [list]. */
+    private fun watchAll(list: List<MediaController>) {
+        val tokens = list.map { it.sessionToken }.toSet()
+        (watched.keys - tokens).forEach { t -> watched.remove(t)?.let { (c, cb) -> c.unregisterCallback(cb) } }
+        for (c in list) {
+            if (c.sessionToken in watched) continue
+            val cb = callbackFor(c.sessionToken)
+            c.registerCallback(cb, main)
+            watched[c.sessionToken] = c to cb
+        }
     }
 
     fun watch() {
@@ -51,13 +75,15 @@ class MediaWatch(
             Log.w(TAG, "media sessions: $e")
             return
         }
+        Log.i(TAG, "watching media sessions")
         pick(controllers())
     }
 
     fun stop() {
         encoder.shutdown()
         try { msm.removeOnActiveSessionsChangedListener(sessions) } catch (_: Exception) {}
-        current?.unregisterCallback(callback)
+        watched.values.forEach { (c, cb) -> c.unregisterCallback(cb) }
+        watched.clear()
         current = null
     }
 
@@ -83,11 +109,11 @@ class MediaWatch(
 
     /** The playing session, else the most recent one (the list is newest first). */
     private fun pick(list: List<MediaController>) {
+        watchAll(list)
         val c = pickSession(list) { it.playbackState?.state == PlaybackState.STATE_PLAYING }
         if (c?.sessionToken != current?.sessionToken) {
-            current?.unregisterCallback(callback)
+            Log.i(TAG, "media: following ${c?.packageName ?: "nothing"} (${list.size} session(s))")
             current = c
-            c?.registerCallback(callback, main)
         }
         report()
     }
@@ -114,6 +140,7 @@ class MediaWatch(
         val s = m.toString()
         if (s == last) return // metadata callbacks repeat a lot
         last = s
+        Log.d(TAG, "media: sending ${if (m.optBoolean("none")) "none" else "${m.optString("pkg")} playing=${m.optBoolean("playing")}"}")
         send(m)
     }
 
