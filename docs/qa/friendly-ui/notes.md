@@ -51,3 +51,30 @@ now cuts a handshake after 1.5 s and retries.
   without an app update; a reload fixes it.
 - After the car leaves (Bluetooth auto-stop or Disconnect) TSLink stays off
   until Pair or Start: by design.
+
+# Round 2: camera link, pairing port (2026-11-16, later)
+
+Same setup; builds up to 3bbcca4. Clean reinstall of TSLink and a clean car
+page (site data, cache and service worker cleared) before the final runs.
+
+| # | Check | Result |
+|---|-------|--------|
+| 1 | Clean reinstall: the old engine exits by itself after uninstall | Pass (6 s, port freed) |
+| 2 | Reinstalled app is accepted (was "denied") | Pass |
+| 3 | First visit, home Wi-Fi: amber "Can't reach the phone at 9.9.0.1:4433" | Pass |
+| 4 | Advanced: phone address on the QR screen, Use this address | Pass |
+| 5 | QR up for minutes: no failed handshakes (Chrome no longer throttles the page) | Pass (phone log: one waiting connection, no errors) |
+| 6 | Scan -> code -> car connected | Pass, 110 ms and 200 ms (was 10.6 s; earlier fix 1.6 s) |
+| 7 | One scan per pairing; the waiting page and the scan match (tag) | Pass |
+| 8 | Phone note stays "Paired with the car at ..." (was "Pairing timed out" after 2 min) | Pass, checked at 2 min 7 s (`06`) |
+
+## Found and fixed this round
+
+| Finding | Fix |
+|---|---|
+| Pairing stalled after the QR was up a while (Chrome: failed WebTransport handshakes delay new ones up to 60 s for 5 min) | Pairing port 4434 with a public certificate; the page waits there; the code comes sealed with a key from the QR secret |
+| "denied" after reinstalling TSLink | Engine looks TSLink's uid up again (same signer only) |
+| Engine kept running after uninstall | Stops and exits once TSLink is gone |
+| No way to set the phone address with QR pairing | Advanced: phone address on every pairing view |
+| Warning colours inconsistent | One palette on phone and car page: red broke, amber needs you, green worked, grey info |
+| Reviews: "Pairing timed out" after a pairing that worked; a reloaded page's dead wait could take the code; 8 reloads could block pairing; another app could pass a link secret | Fixed with tests (see commit 2182e5c) |
