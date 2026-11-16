@@ -33,7 +33,6 @@ import rikka.shizuku.Shizuku
 @SuppressLint("SetTextI18n") // English-only UI built in code
 class SetupActivity : Activity() {
     companion object {
-        const val SHIZUKU_PACKAGE = "moe.shizuku.privileged.api"
         private const val REQ_SHIZUKU = 11
         private const val REQ_NOTIFICATIONS = 12
         private const val REQ_BLUETOOTH = 13
@@ -42,11 +41,14 @@ class SetupActivity : Activity() {
     private val ui = Ui(this)
 
     /** A step's views, built once (the steps only depend on the phone's brand), updated by [refresh]. */
-    private class StepViews(val dot: View, val title: TextView, val state: TextView, val text: TextView, val action: Button, val tick: Button)
+    private class StepViews(val card: View, val dot: View, val title: TextView, val state: TextView, val text: TextView, val action: Button, val tick: Button)
 
     private val views = LinkedHashMap<StepId, StepViews>()
-    private lateinit var summaryView: TextView
-    private val brand = Brand.of(Build.MANUFACTURER, Build.BRAND)
+    private lateinit var headerView: TextView
+    private lateinit var introView: TextView
+    private lateinit var backButton: Button
+    private lateinit var nextButton: Button
+    private var page = SetupPage.SHIZUKU
     private var askedNotifications = false
 
     private val shizukuChanged = Shizuku.OnBinderReceivedListener { runOnUiThread(::refresh) }
@@ -59,9 +61,18 @@ class SetupActivity : Activity() {
         super.onCreate(savedInstanceState)
         Prefs.setSetupSeen(this) // opens by itself once; later from Diagnostics
         setContentView(buildScreen())
+        // Open where there's something to do (or where the user was before a rotation).
+        val steps = Setup.steps(setupFacts())
+        page = savedInstanceState?.getString("page")?.let(SetupPage::valueOf)
+            ?: SetupPage.entries.first { !Setup.pageReady(it, steps) || it == SetupPage.OPTIONAL }
         Shizuku.addBinderReceivedListener(shizukuChanged)
         Shizuku.addBinderDeadListener(shizukuDead)
         Shizuku.addRequestPermissionResultListener(shizukuAnswered)
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putString("page", page.name)
     }
 
     override fun onResume() {
@@ -80,14 +91,14 @@ class SetupActivity : Activity() {
 
     private fun buildScreen(): View {
         val content = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        headerView = ui.text(13f, Ui.ACCENT, bold = true).apply { letterSpacing = 0.08f }
+        content.addView(headerView)
         content.addView(ui.text(26f, bold = true).apply { text = "Setup" })
-        content.addView(ui.line("Get the phone ready for the car. Come back here any time from Diagnostics."))
-        summaryView = ui.text(16f, bold = true).apply { setPadding(0, ui.dp(8), 0, ui.dp(16)) }
-        content.addView(summaryView)
+        introView = ui.line().apply { setPadding(0, ui.dp(4), 0, ui.dp(16)) }
+        content.addView(introView)
 
-        var number = 0
-        for (step in Setup.steps(facts())) {
-            val card = ui.card(content, if (step.optional) "Optional" else "Step ${++number}")
+        for (step in Setup.steps(setupFacts())) {
+            val card = ui.card(content, if (step.optional) "Optional" else "Needed")
             val dot = ui.dot()
             val title = ui.text(17f, bold = true)
             card.addView(LinearLayout(this).apply {
@@ -108,19 +119,42 @@ class SetupActivity : Activity() {
                 addView(action, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
                 addView(tick, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { marginStart = ui.dp(8) })
             }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = ui.dp(12) })
-            views[step.id] = StepViews(dot, title, state, text, action, tick)
+            views[step.id] = StepViews(card, dot, title, state, text, action, tick)
         }
 
-        content.addView(ui.button("Done", primary = true) { finish() }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = ui.dp(4) })
+        backButton = ui.button("Back", primary = false) { go(-1) }
+        nextButton = ui.button("Next", primary = true) { go(+1) }
+        content.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            addView(backButton, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f).apply { marginEnd = ui.dp(8) })
+            addView(nextButton, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+        }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = ui.dp(4) })
         return ui.screen(window, content)
     }
 
+    /** Next/Back between pages; Next on the last page closes setup. */
+    private fun go(delta: Int) {
+        val i = page.ordinal + delta
+        if (i >= SetupPage.entries.size) return finish()
+        page = SetupPage.entries[i.coerceAtLeast(0)]
+        refresh()
+    }
+
     private fun refresh() {
-        val steps = Setup.steps(facts())
-        summaryView.text = Setup.summary(steps)
-        summaryView.setTextColor(if (Setup.allRequiredReady(steps)) Ui.OK else Ui.TEXT)
+        val steps = Setup.steps(setupFacts())
+        val ready = Setup.pageReady(page, steps)
+        headerView.text = "STEP ${page.ordinal + 1} OF ${SetupPage.entries.size} · ${page.title.uppercase()}"
+        introView.text = when (page) {
+            SetupPage.SHIZUKU -> "TSLink needs the free Shizuku app to show your apps in the car. No root needed."
+            SetupPage.PHONE -> "So Android keeps TSLink running and the car can join the hotspot."
+            SetupPage.OPTIONAL -> "Nice to have. Skip any of these, you can come back from More > Setup."
+        }
+        // The Shizuku page shows one card: the step to do now.
+        val shizuku = Setup.shizukuStep(steps).id
         for (step in steps) {
             val v = views[step.id] ?: continue
+            val shown = Setup.page(step.id) == page && (page != SetupPage.SHIZUKU || step.id == shizuku)
+            v.card.visibility = if (shown) View.VISIBLE else View.GONE
             v.title.text = step.title
             v.text.text = step.text
             val color = when (step.state) {
@@ -140,38 +174,17 @@ class SetupActivity : Activity() {
             v.tick.visibility = if (step.tickable) View.VISIBLE else View.GONE
             v.tick.text = if (step.state == StepState.OK) "Not done" else "Mark done"
         }
-    }
-
-    // ---- Checks -------------------------------------------------------------
-
-    private fun facts(): SetupFacts {
-        val running = Shizuku.pingBinder()
-        return SetupFacts(
-            shizukuInstalled = shizukuInstalled(),
-            shizukuRunning = running,
-            shizukuAllowed = if (running) shizukuAllowed() else null,
-            notificationPermission = Build.VERSION.SDK_INT < 33 ||
-                checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED,
-            carNotifications = getSystemService(NotificationManager::class.java).isNotificationListenerAccessGranted(listener),
-            batteryUnrestricted = getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(packageName),
-            carChosen = Prefs.carAddress(this) != null,
-            brand = brand,
-            ticked = Prefs.setupTicked(this).mapNotNull { n -> StepId.entries.firstOrNull { it.name == n } }.toSet(),
-        )
-    }
-
-    private fun shizukuInstalled() = try {
-        packageManager.getPackageInfo(SHIZUKU_PACKAGE, 0)
-        true
-    } catch (_: PackageManager.NameNotFoundException) {
-        false
-    }
-
-    /** Null if Shizuku went away between the ping and the question. */
-    private fun shizukuAllowed(): Boolean? = try {
-        Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
-    } catch (_: RuntimeException) {
-        null
+        backButton.visibility = if (page == SetupPage.SHIZUKU) View.INVISIBLE else View.VISIBLE
+        nextButton.text = when {
+            page == SetupPage.OPTIONAL -> "Done"
+            page == SetupPage.PHONE && !ready -> "Skip for now"
+            else -> "Next"
+        }
+        // Nothing works without Shizuku: no skipping that page.
+        val canGo = page != SetupPage.SHIZUKU || ready
+        nextButton.isEnabled = canGo
+        nextButton.alpha = if (canGo) 1f else 0.4f
+        ui.stylePrimary(nextButton, primary = ready || page == SetupPage.OPTIONAL)
     }
 
     private val listener get() = ComponentName(this, Listener::class.java)
