@@ -195,6 +195,8 @@ const conn = new Connection({
   onFrame: forwardFrame,
   onLost: (buf) => toWorker({ type: 'lost', buf }, [buf]),
   onRtt: (ms) => rtt.push(ms),
+  // Pairing: the phone may switch any moment, so no growing backoff.
+  retryMs: () => pairingSecret ? PAIRING_RETRY_MS : performance.now() < pairedQuietUntil ? PAIRED_RETRY_MS : undefined,
 });
 
 function send(m: PageMsg) {
@@ -1103,7 +1105,11 @@ function renderDebug() {
 let pairingSecret: string | null = null;
 /** Just paired: the phone switches back to the real code; failed tries meanwhile are expected. */
 let pairedQuietUntil = 0;
-const PAIRED_SWITCH_MS = 2500;
+/** Retry pace while the QR code is up (the phone accepts the secret once it scanned it). */
+const PAIRING_RETRY_MS = 1000;
+/** Retry pace right after pairing, while the phone switches to the real code (~1 s). */
+const PAIRED_RETRY_MS = 300;
+const PAIRED_QUIET_MS = 8000;
 
 function startQrPairing() {
   pairingSecret = newSecret();
@@ -1143,9 +1149,10 @@ function onPaired(raw: unknown) {
   settings = { ...settings, code, host: s.host, port: s.port };
   showPairing(false);
   toast('Paired with your phone');
-  // The phone keeps the pairing certificate ~1.5 s more: connect after it switched.
-  pairedQuietUntil = performance.now() + PAIRED_SWITCH_MS + 8000;
-  setTimeout(() => conn.restart(), PAIRED_SWITCH_MS);
+  // Leaving the pairing session tells the phone to switch to the real code;
+  // reconnect at once and keep trying fast until it has.
+  pairedQuietUntil = performance.now() + PAIRED_QUIET_MS;
+  conn.restart();
 }
 
 $('pair-manual').addEventListener('click', () => {

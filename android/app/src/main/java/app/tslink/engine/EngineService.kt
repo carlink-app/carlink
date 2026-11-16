@@ -63,11 +63,13 @@ class EngineService : IEngine.Stub() {
         val gen = ++pairingGen
         engine = Engine(s, port, allow, handover = code).also { e ->
             e.toApp = toApp()
-            // A moment for the message to leave before the engine restarts.
+            // The car closes the session once it has the code: switch back right
+            // then. A car that doesn't is switched after a moment for the message to leave.
             e.onPaired = { remote ->
                 pairing = "paired $remote"
                 Thread { Thread.sleep(1_500); endPairing(gen) }.start()
             }
+            e.onCarLeft = { Thread { endPairing(gen) }.start() }
         }
         pairing = "waiting"
         Thread { Thread.sleep(PAIRING_MS); endPairing(gen) }.start()

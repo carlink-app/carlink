@@ -24,6 +24,8 @@ export interface ConnectionHooks {
   /** A video stream that ended with an error; `buf` holds whatever arrived. */
   onLost(buf: ArrayBuffer): void;
   onRtt(ms: number): void;
+  /** A fixed wait before the next try (QR pairing: the phone switches any moment), or undefined for the backoff. */
+  retryMs?(): number | undefined;
 }
 
 const PING_MS = 20;
@@ -109,9 +111,11 @@ export class Connection {
       }
       if (!live()) break;
       if (wasConnected) backoff = BACKOFF_MIN_MS;
-      this.hooks.onStatus({ s: 'error', text: `${why} · retrying in ${backoff / 1000}s` });
-      await this.sleep(backoff);
-      backoff = Math.min(backoff * 2, BACKOFF_MAX_MS);
+      const fixed = this.hooks.retryMs?.();
+      const wait = fixed ?? backoff;
+      this.hooks.onStatus({ s: 'error', text: `${why} · retrying in ${wait / 1000}s` });
+      await this.sleep(wait);
+      if (fixed === undefined) backoff = Math.min(backoff * 2, BACKOFF_MAX_MS);
     }
   }
 

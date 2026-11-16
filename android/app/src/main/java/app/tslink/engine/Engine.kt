@@ -33,6 +33,8 @@ class Engine(
 ) : NativeCore.Listener {
     /** Pairing mode: called with the car's address once the real code went to it. */
     @Volatile var onPaired: ((String) -> Unit)? = null
+    /** Pairing mode: the car that got the code left (it reconnects with the real code). */
+    @Volatile var onCarLeft: (() -> Unit)? = null
     private var handedOver = false
     companion object {
         const val MAX_PANES = 4
@@ -238,6 +240,9 @@ class Engine(
                 send(JSONObject().put("t", "paired").put("code", handover))
                 Log.i(TAG, "pairing: code sent to $remote")
                 onPaired?.invoke(remote)
+            } else if (!connected && handedOver) {
+                // Not before the code went out: a reloading car page must not end pairing.
+                onCarLeft?.invoke()
             }
             return@post
         }
