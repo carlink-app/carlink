@@ -21,11 +21,14 @@ object PhoneStatus {
             val bm = Shell.context.getSystemService(BatteryManager::class.java)
             val level = bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
             if (level in 0..100) m.put("bat", level)
-            m.put("chg", bm.isCharging)
+            // isCharging() reads false in the shell process; the status property doesn't.
+            val st = bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_STATUS)
+            m.put("chg", st == BatteryManager.BATTERY_STATUS_CHARGING || st == BatteryManager.BATTERY_STATUS_FULL)
         } catch (e: Exception) {
             Log.d(TAG, "battery: $e")
         }
         try {
+            initTelephony
             val tm = Shell.context.getSystemService(TelephonyManager::class.java)
             // No SIM or airplane mode: no bars (-1), not "0 bars".
             val inService = tm.simState == TelephonyManager.SIM_STATE_READY
@@ -35,6 +38,22 @@ object PhoneStatus {
             Log.d(TAG, "signal: $e")
         }
         return m
+    }
+
+    /**
+     * Telephony's service lookup is set up by the app process start, which the
+     * shell process (app_process) skips: do that one step, once. Read-only use.
+     */
+    private val initTelephony by lazy {
+        try {
+            val tsm = Class.forName("android.os.TelephonyServiceManager").getDeclaredConstructor().newInstance()
+            Class.forName("android.telephony.TelephonyFrameworkInitializer")
+                .getMethod("setTelephonyServiceManager", tsm.javaClass).invoke(null, tsm)
+            true
+        } catch (e: Throwable) {
+            Log.d(TAG, "telephony init: $e")
+            false
+        }
     }
 
     /** Short label for a TelephonyManager.NETWORK_TYPE_* value ("" if unknown). */

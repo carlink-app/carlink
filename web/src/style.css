@@ -348,7 +348,7 @@ svg { fill: currentColor; }
 
 /* ---- phone battery and signal, above the clock ---- */
 #phone-status { display: grid; grid-template-columns: auto auto; align-items: center; justify-items: center; gap: 4px 6px; font-size: 15px; font-weight: 600; color: var(--muted); }
-#phone-status[hidden] { display: none; }
+#phone-status[hidden], #phone-status [hidden] { display: none; }
 #signal { display: flex; align-items: flex-end; gap: 2px; height: 16px; }
 #signal i { width: 4px; border-radius: 1px; background: #ffffff33; }
 #signal i:nth-child(1) { height: 25%; } #signal i:nth-child(2) { height: 50%; } #signal i:nth-child(3) { height: 75%; } #signal i:nth-child(4) { height: 100%; }
