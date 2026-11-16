@@ -289,9 +289,7 @@ function openNotif(n: Notif) {
 function setTray(next: Notif[]) {
   tray = next;
   const count = tray.length;
-  $('btn-tray').hidden = count === 0;
   $('tray-count').textContent = trayBadge(count);
-  if (count === 0) showTray(false);
   if (!$('tray').hidden) renderTray();
   renderBanners(); // the "+N more" chip
 }
@@ -314,6 +312,14 @@ $('panes').addEventListener('pointerdown', (e) => {
 let trayShownAt = 0;
 function renderTray() {
   trayShownAt = performance.now(); // rows may have moved: ignore taps meant for the old order
+  $('tray-clear').hidden = tray.length === 0;
+  if (!tray.length) {
+    const none = document.createElement('div');
+    none.className = 'tray-empty';
+    none.textContent = 'No notifications';
+    $('tray-list').replaceChildren(none);
+    return;
+  }
   $('tray-list').replaceChildren(...tray.map((n) => {
     const row = document.createElement('div');
     row.className = `tray-item ${n.kind}`;
@@ -733,7 +739,6 @@ function loadPins(): AppInfo[] {
 function setPins(list: AppInfo[]) {
   pins = list;
   try { localStorage.setItem(PINS_KEY, JSON.stringify(pins)); } catch { /* quota: icons too big */ }
-  disarm();
   renderRecents();
 }
 
@@ -903,7 +908,6 @@ function launch(a: AppInfo) {
 function setRecents(list: AppInfo[]) {
   recents = list.slice(0, MAX_RECENTS);
   try { localStorage.setItem('tslink.recents', JSON.stringify(recents)); } catch { /* quota: icons too big */ }
-  disarm();
   renderRecents();
 }
 
@@ -923,7 +927,6 @@ function closeApp(pkg: string) {
     showLauncher(true);
   }
   send({ t: 'close', pane: 0, pkg });
-  disarm();
   $('recents').querySelectorAll<HTMLElement>('.recent').forEach((el) => {
     el.classList.toggle('current', el.dataset.pkg === current);
     // A pinned app stays on the sidebar, just no longer running.
@@ -935,31 +938,6 @@ function closeApp(pkg: string) {
   setTimeout(() => setRecents(recents.filter((a) => a.pkg !== pkg || a.pkg === current)), LEAVE_MS);
 }
 
-function closeAll() {
-  send({ t: 'close-all', pane: 0 });
-  current = null;
-  $('recents').querySelectorAll('.recent:not(.pinned)').forEach((el) => el.classList.add('leaving'));
-  showLauncher(true);
-  setTimeout(() => setRecents([]), LEAVE_MS);
-}
-
-// Close all takes two taps: the first arms it, the second acts.
-let armed: string | null = null; // '*' while close-all is armed
-let armTimer = 0;
-function arm(what: string) {
-  armed = what;
-  clearTimeout(armTimer);
-  armTimer = window.setTimeout(disarm, 3000);
-  renderArmed();
-}
-function disarm() {
-  armed = null;
-  clearTimeout(armTimer);
-  renderArmed();
-}
-function renderArmed() {
-  $('btn-closeall').classList.toggle('armed', armed === '*');
-}
 
 /** Sidebar apps: the pinned ones on top, a line, then recents that aren't pinned. */
 function renderRecents() {
@@ -971,8 +949,6 @@ function renderRecents() {
     ...(pins.length ? [divider] : []),
     ...rest.map((a) => railApp(a, false)),
   );
-  $('btn-closeall').hidden = recents.length === 0;
-  renderArmed(); // a re-render (new app list) keeps a pending close visible
 }
 
 function railApp(a: AppInfo, pinned: boolean): HTMLButtonElement {
@@ -984,7 +960,7 @@ function railApp(a: AppInfo, pinned: boolean): HTMLButtonElement {
   b.append(appIcon(a));
   // Hold for the menu (open, pin, close); pinned apps can also be dragged after the hold.
   if (pinned) attachPinDrag(b, a);
-  else attachLongPress(b, () => { disarm(); openSheet(a); });
+  else attachLongPress(b, () => openSheet(a));
   b.addEventListener('click', () => launch(a));
   return b;
 }
@@ -1031,7 +1007,7 @@ function attachPinDrag(b: HTMLButtonElement, a: AppInfo) {
     reset();
     if (!wasLifted) return; // a tap: the click launches
     swallowClick = true;
-    if (!wasDragging) { disarm(); openSheet(a); return; }
+    if (!wasDragging) { openSheet(a); return; }
     const from = pins.findIndex((p) => p.pkg === a.pkg && p.cls === a.cls);
     const to = dropIndex(centres, e.clientY);
     if (from >= 0 && to !== from) setPins(movePin(pins, from, to));
@@ -1050,7 +1026,6 @@ let launcherOn = false;
 function showLauncher(on: boolean) {
   if (on) { $('opening').hidden = true; showTray(false); }
   else if (query) setQuery(''); // the full launcher next time
-  if (on !== launcherOn) disarm(); // a close armed for the app in front no longer applies
   launcherOn = on;
   $('launcher').hidden = !on;
   $('btn-home').classList.toggle('active', on);
@@ -1060,10 +1035,6 @@ $('btn-home').addEventListener('click', () => {
   const on = !launcherOn;
   if (on) send({ t: 'key', pane: 0, k: 'home' });
   showLauncher(on || !current); // until something is launched, there's nothing behind it
-});
-$('btn-closeall').addEventListener('click', () => {
-  if (armed === '*') closeAll();
-  else arm('*');
 });
 $('btn-back').addEventListener('click', () => {
   if (launcherOn && current) { showLauncher(false); return; }

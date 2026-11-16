@@ -8,6 +8,10 @@ describe('accentFrom', () => {
     const c = accentFrom(px([30, 215, 96, 255], [0, 0, 0, 255], [255, 255, 255, 255], [128, 128, 128, 255], [255, 0, 0, 0]))!;
     expect(c).toEqual([30, 215, 96]);
   });
+  it('the strongest hue wins instead of a grey mix of all', () => {
+    const c = accentFrom(px([240, 200, 20, 255], [240, 200, 20, 255], [240, 200, 20, 255], [40, 60, 200, 255]))!;
+    expect(c).toEqual([240, 200, 20]);
+  });
   it('grey images: none', () => {
     expect(accentFrom(px([128, 128, 128, 255], [20, 20, 20, 255]))).toBeNull();
     expect(accentFrom([])).toBeNull();

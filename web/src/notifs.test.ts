@@ -252,7 +252,7 @@ describe('trayOthers ("+N" chip)', () => {
 
 describe('trayBadge', () => {
   it('shows the count up to 9, then 9+', () => {
-    expect(trayBadge(0)).toBe('0');
+    expect(trayBadge(0)).toBe('');
     expect(trayBadge(1)).toBe('1');
     expect(trayBadge(9)).toBe('9');
     expect(trayBadge(10)).toBe('9+');

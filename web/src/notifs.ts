@@ -98,8 +98,8 @@ export function addToTray(list: readonly Notif[], n: Notif): Notif[] {
   return n.kind === 'call' ? rest : [n, ...rest].slice(0, MAX_TRAY);
 }
 
-/** The sidebar's tray badge: the count, capped at "9+". */
-export const trayBadge = (count: number): string => (count > 9 ? '9+' : String(count));
+/** The sidebar's tray badge: the count, capped at "9+"; empty (hidden) at 0. */
+export const trayBadge = (count: number): string => (count > 9 ? '9+' : count > 0 ? String(count) : '');
 
 /** The "+N" chip on a banner: tray entries other than the banner itself. */
 export const trayOthers = (tray: readonly Notif[], id: string): number => tray.filter((t) => t.id !== id).length;
