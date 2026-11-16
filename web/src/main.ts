@@ -226,6 +226,9 @@ function onMessage(m: PhoneMsg) {
         resumePending = false;
         const a = current ? recents.find((r) => r.pkg === current) : undefined;
         if (a) send({ t: 'launch', pane: 0, pkg: a.pkg, cls: a.cls });
+        // A reloaded page doesn't know: the phone says what it put back, so
+        // show that instead of the launcher on top of it.
+        else if (!current && typeof m.front === 'string' && m.front) showFront(m.front);
       }
       break;
     }
@@ -282,16 +285,20 @@ function remember(id: string) {
 }
 
 /** Open a notification's app on the car (the phone opens it; see notif-open). */
+/** [pkg] is in front on the car screen (the phone says so): sidebar and launcher follow. */
+function showFront(pkg: string) {
+  current = pkg;
+  const app = apps.find((a) => a.pkg === pkg) ?? recents.find((a) => a.pkg === pkg);
+  if (app) setRecents([app, ...recents.filter((r) => r.pkg !== app.pkg)]);
+  showLauncher(false);
+}
+
 function openNotif(n: Notif) {
   send({ t: 'notif-open', id: n.id });
   showOpening(n.app, n.icon, OPENING_NOTIF_MS);
   dismiss(n.id);
   showTray(false);
-  // The app comes up on the car screen: in front, like a launch (not behind the launcher).
-  current = n.pkg;
-  const app = apps.find((a) => a.pkg === n.pkg);
-  if (app) setRecents([app, ...recents.filter((r) => r.pkg !== app.pkg)]);
-  showLauncher(false);
+  showFront(n.pkg); // in front, like a launch (not behind the launcher)
 }
 
 function setTray(next: Notif[]) {

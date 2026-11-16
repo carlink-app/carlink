@@ -416,7 +416,11 @@ class Engine(
             lastLaunch[id]?.let { (pkg, cls) -> Apps.launch(pkg, cls, pane.displayId) }
         }
         val pane = panes[id] ?: return
-        send(JSONObject().put("t", "pane").put("id", id).put("w", pane.width).put("h", pane.height).put("codec", codec))
+        send(
+            JSONObject().put("t", "pane").put("id", id).put("w", pane.width).put("h", pane.height).put("codec", codec)
+                // What the phone put back on this pane: a reloaded page shows it instead of its launcher.
+                .apply { lastLaunch[id]?.let { put("front", it.first) } },
+        )
     }
 
     private fun releasePanes() {

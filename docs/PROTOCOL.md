@@ -125,7 +125,7 @@ Phone -> page:
 
 ```json
 {"t":"hello","v":2,"device":"Pixel 9 Pro","android":36}
-{"t":"pane","id":0,"w":1824,"h":1200,"codec":"h264"}
+{"t":"pane","id":0,"w":1824,"h":1200,"codec":"h264","front":"com.waze"}
 {"t":"apps","list":[{"pkg":"...","cls":"...","label":"Maps","cat":"nav","ih":"5f3a9c1e-4180"}]}
 {"t":"app-icons","list":[{"pkg":"...","ih":"5f3a9c1e-4180","icon":"data:image/png;base64,..."}]}
 {"t":"launched","pane":0,"pkg":"..."}
@@ -262,4 +262,9 @@ Phone to car after `hello`, then whenever it changes (checked every 10 s):
 `bat` 0-100, `chg` charging, `sig` signal bars 0-4 (-1: no service), `net`
 one of `5G`, `LTE`, `3G`, `2G` or empty. Parts the phone can't read are left
 out. The page shows them above the sidebar clock.
+
+`pane.front` (optional): the app the phone put back on that pane (the last
+one launched there, e.g. after a reconnect or a new layout). A page that
+doesn't know what was in front (just reloaded) shows that app instead of
+its launcher.
 

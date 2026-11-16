@@ -60,7 +60,7 @@ export type PhoneMsg =
   | { t: 'challenge'; v: number; nonce: string }
   | { t: 'authok' }
   | { t: 'hello'; v: number; device?: string; android?: number }
-  | { t: 'pane'; id: number; w: number; h: number; codec: Codec }
+  | { t: 'pane'; id: number; w: number; h: number; codec: Codec; /** The app the phone put back on it, if any. */ front?: string }
   | { t: 'apps'; list: AppInfo[] }
   | { t: 'app-icons'; list: { pkg: string; ih: string; icon: string }[] }
   /** Battery and mobile signal for the sidebar; missing parts couldn't be read. */
