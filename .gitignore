@@ -16,3 +16,4 @@ spike/clip.hevc
 
 # Claude Code agent worktrees
 .claude/
+.superpowers/
