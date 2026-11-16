@@ -66,10 +66,11 @@ class MainActivity : Activity() {
     /** Last engine state (not messages): what [render] draws. */
     private var lastStatus: EngineStatus = EngineStatus.Stopped
     private val engineRunning get() = lastStatus is EngineStatus.Running
-    /** Pair was tapped while TSLink was off: open the scanner once it runs. */
-    private var pendingScan = false
-    /** A linked secret waiting for TSLink to run (with [pendingScan]): pair with it instead of scanning. */
-    private var pendingSecret: String? = null
+    /** What to do once TSLink runs (Pair tapped, or a link answered, while it was off): scan, or pair with a linked secret. */
+    private sealed interface PendingPair
+    private object Scan : PendingPair
+    private class Linked(val secret: String) : PendingPair
+    private var pendingPair: PendingPair? = null
     private var linkDialog: AlertDialog? = null
     /** A status poll is out (UI thread only). */
     private var polling = false
@@ -149,7 +150,7 @@ class MainActivity : Activity() {
     private val refresher = object : Runnable {
         override fun run() {
             // Not while a Pair tap starts TSLink: an in-between "stopped" would drop the scan.
-            if (engine != null && !pendingScan && !polling) {
+            if (engine != null && pendingPair == null && !polling) {
                 polling = true // one at a time: a slow engine (hotspot restart) mustn't pile up threads
                 call(onResult = { polling = false; setStatus(it) }) { it.status() }
             }
@@ -319,9 +320,8 @@ class MainActivity : Activity() {
      * to that car. TSLink off: start it first, the scanner opens once it runs.
      */
     private fun pairCar() {
-        pendingSecret = null // the user asked to scan: not a link from earlier
         if (engine == null || !engineRunning) {
-            pendingScan = true
+            pendingPair = Scan // the user asked to scan: not a link from earlier
             startEngine()
             return
         }
@@ -368,8 +368,7 @@ class MainActivity : Activity() {
     /** Pair with [secret], starting TSLink first if it is off. */
     private fun pairWith(secret: String) {
         if (engine != null && engineRunning) return startPairing(secret)
-        pendingSecret = secret
-        pendingScan = true
+        pendingPair = Linked(secret)
         startEngine()
     }
 
@@ -469,10 +468,9 @@ class MainActivity : Activity() {
      */
     private fun setStatus(s: String) = runOnUiThread {
         val st = EngineStatus.parse(s)
-        val scan = Home.scanAfter(pendingScan, st)
-        pendingScan = scan.pending
-        val linked = pendingSecret
-        if (!scan.pending) pendingSecret = null
+        val scan = Home.scanAfter(pendingPair != null, st)
+        val pending = pendingPair
+        if (!scan.pending) pendingPair = null
         when (st) {
             is EngineStatus.Message -> {
                 showMessage(st.text, Home.replyTone(s))
@@ -487,7 +485,7 @@ class MainActivity : Activity() {
             }
         }
         render()
-        if (scan.open) if (linked != null) startPairing(linked) else openScanner()
+        if (scan.open) if (pending is Linked) startPairing(pending.secret) else openScanner()
     }
 
     /** Draw the status card and the Start/Stop button from [lastStatus] and the setup state. */

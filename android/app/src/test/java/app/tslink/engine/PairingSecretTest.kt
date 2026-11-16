@@ -18,7 +18,7 @@ class PairingSecretTest {
 
     @Test fun agreesWithTheScanner() {
         // What the app's QR scanner accepts, the engine takes unchanged.
-        val s = app.tslink.ui.Pairing.secretFrom("tslink-pair:abcdefghjklmnpqrstuv")!!
+        val s = app.tslink.ui.Pairing.secretFrom("https://tslink.app/pair#abcdefghjklmnpqrstuv")!!
         assertEquals(s, pairingSecret(s))
     }
 }

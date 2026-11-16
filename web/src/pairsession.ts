@@ -6,7 +6,9 @@
 import { hkdf } from '@noble/hashes/hkdf.js';
 import { hmac } from '@noble/hashes/hmac.js';
 import { sha256 } from '@noble/hashes/sha2.js';
-import { certHashes } from './cert';
+import { fromBase64, toBase64 } from './auth';
+import { certHashes, weekStart } from './cert';
+import { withTimeout } from './connection';
 import { endpoint } from './settings';
 
 const enc = new TextEncoder();
@@ -17,19 +19,14 @@ export const PAIR_CERT_NAME = 'TSLINK-PAIRING';
 
 const derive = (secret: string, info: string) => hkdf(sha256, enc.encode(secret), SALT, enc.encode(info), 32);
 
-function b64url(b: Uint8Array): string {
-  let s = '';
-  for (const x of b) s += String.fromCharCode(x);
-  return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
+const b64url = (b: Uint8Array) => toBase64(b).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 
+/** Bytes from base64url, or null if it isn't. */
 function fromB64url(s: string): Uint8Array<ArrayBuffer> | null {
-  if (!/^[A-Za-z0-9_-]*$/.test(s)) return null;
   try {
-    const bin = atob(s.replace(/-/g, '+').replace(/_/g, '/'));
-    return Uint8Array.from(bin, (c) => c.charCodeAt(0));
+    return new Uint8Array(fromBase64(s.replace(/-/g, '+').replace(/_/g, '/')));
   } catch {
-    return null;
+    return null; // not base64
   }
 }
 
@@ -78,7 +75,20 @@ export class PairSession {
   private wt: WebTransport | null = null;
   private wake: (() => void) | null = null;
 
-  constructor(private hooks: PairHooks) {}
+  /** One-way, so computed once; the certificate hashes once per week (two ECDSA certificates). */
+  private readonly tag: string;
+  private hashes: { week: number; list: Uint8Array[] } | null = null;
+
+  constructor(private hooks: PairHooks) {
+    this.tag = pairTag(hooks.secret);
+  }
+
+  private certHashes(): Uint8Array[] {
+    const now = Math.floor(Date.now() / 1000);
+    const week = weekStart(now);
+    if (this.hashes?.week !== week) this.hashes = { week, list: certHashes(PAIR_CERT_NAME, now) };
+    return this.hashes.list;
+  }
 
   start() {
     if (this.running) return;
@@ -126,25 +136,19 @@ export class PairSession {
 
   /** One wait on the pairing port: the code, or null if the phone closed without one. Throws if it can't connect. */
   private async attempt(connected: () => void): Promise<string | null> {
-    const { host, port, secret } = this.hooks;
-    const hashes = certHashes(PAIR_CERT_NAME, Math.floor(Date.now() / 1000));
+    const { host, port } = this.hooks;
+    const hashes = this.certHashes();
     const wt = new WebTransport(`${endpoint({ host, port: port + 1 })}/pair`, {
       serverCertificateHashes: hashes.map((h) => ({ algorithm: 'sha-256', value: h as BufferSource })),
     });
     this.wt = wt;
     try {
-      let timer = 0;
-      const timeout = new Promise<never>((_, reject) => { timer = window.setTimeout(() => reject(new Error('timed out')), READY_MS); });
-      try {
-        await Promise.race([wt.ready, timeout]);
-      } finally {
-        clearTimeout(timer);
-      }
+      await withTimeout(wt.ready, READY_MS, 'timed out');
       connected();
-      console.info(`pairing: waiting on ${host}:${port + 1} (tag ${pairTag(secret).slice(0, 6)})`);
+      console.info(`pairing: waiting on ${host}:${port + 1} (tag ${this.tag.slice(0, 6)})`);
       const bidi = await wt.createBidirectionalStream();
       const writer = bidi.writable.getWriter();
-      await writer.write(enc.encode(JSON.stringify({ t: 'pair', tag: pairTag(secret) }) + '\n'));
+      await writer.write(enc.encode(JSON.stringify({ t: 'pair', tag: this.tag }) + '\n'));
       const reader = bidi.readable.getReader();
       const dec = new TextDecoder();
       let buf = '';

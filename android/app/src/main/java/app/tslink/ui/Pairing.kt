@@ -6,10 +6,9 @@ import java.net.URI
 /**
  * The car page's pairing QR code (web/src/pairing.ts): the link
  * `https://tslink.app/pair#<one-time secret>`, so the phone's own camera
- * opens TSLink too (App Link). Older pages show `TSLINK-PAIR:<secret>`.
+ * opens TSLink too (App Link).
  */
 object Pairing {
-    const val PREFIX = "TSLINK-PAIR:"
     const val SECRET_LENGTH = 20
     private const val HOST = "tslink.app"
     private val PATHS = setOf("/pair", "/pair/")
@@ -20,9 +19,7 @@ object Pairing {
     /** The secret from a scanned QR code or an opened link, or null if it isn't a TSLink pairing code. */
     fun secretFrom(raw: String?): String? {
         if (raw == null) return null
-        val text = raw.trim()
-        val secret = if (text.startsWith(PREFIX, ignoreCase = true)) text.substring(PREFIX.length) else fromLink(text)
-        return secret?.trim()?.uppercase()?.takeIf(::isSecret)
+        return fromLink(raw.trim())?.uppercase()?.takeIf(::isSecret)
     }
 
     /** Only https://tslink.app/pair with the secret after # (never sent to a server); nothing else. */

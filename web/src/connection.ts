@@ -282,7 +282,7 @@ export class Connection {
   }
 }
 
-function withTimeout<T>(p: Promise<T>, ms: number, msg: string): Promise<T> {
+export function withTimeout<T>(p: Promise<T>, ms: number, msg: string): Promise<T> {
   let t = 0;
   return Promise.race([p, new Promise<never>((_, reject) => { t = window.setTimeout(() => reject(new Error(msg)), ms); })])
     .finally(() => clearTimeout(t));

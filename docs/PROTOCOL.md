@@ -218,7 +218,8 @@ different week (clock off).
 1. The car page makes a one-time secret (20 characters from the pairing-code
    alphabet, 100 bits) and shows the link `https://tslink.app/pair#<secret>`
    as a QR code. The secret is the fragment, which browsers never send to a
-   server. Older pages showed `TSLINK-PAIR:<secret>`; the app reads both.
+   server. (Pages before the pairing port showed `TSLINK-PAIR:<secret>`; the
+   app no longer accepts that form, since nothing on the phone serves it.)
 2. The phone reads it: with TSLink's scanner (Pair a car), or with the
    phone's own camera, which opens the link in TSLink (Android App Link,
    verified by `/.well-known/assetlinks.json`; a link only pairs after the

@@ -16,7 +16,7 @@ class EngineService : IEngine.Stub() {
     private var port = 0
     private var allow = ""
     private val pairing = PairingStatus()
-    private val appUid = AppUid(::installedApp)
+    private val appUid = AppUid(::installedUid, ::installedSigner)
 
     init {
         // Shizuku keeps this process when TSLink is uninstalled: it would go on
@@ -229,28 +229,28 @@ internal fun <T> retryWhileInUse(tries: Int = 10, waitMs: Long = 200, sleep: (Lo
  * (Shizuku keeps it), which gives the app a new uid; a cached one would
  * deny the new app everything ("denied"). The signer seen first is pinned:
  * another app installed under the name, with another key, is not TSLink.
+ * The signer is only read when the uid changed: the checks stay cheap.
  */
-internal class AppUid(private val lookup: () -> Install?) {
-    /** An installed app.tslink: its uid and its signing certificate(s), as one string. */
-    data class Install(val uid: Int, val signer: String)
-
+internal class AppUid(private val uidOf: () -> Int?, private val signerOf: () -> String?) {
     @Volatile private var signer: String? = null
-    @Volatile private var cached: Int? = null
+    /** The last uid that passed the signer check. */
+    @Volatile private var trusted: Int? = null
 
     /** TSLink's uid now, or null if it isn't installed (or another signer is). */
     @Synchronized
     private fun current(): Int? {
-        val now = lookup()
-        val pinned = signer ?: now?.signer.also { signer = it }
-        val uid = now?.takeIf { it.signer == pinned }?.uid
-        cached = uid
-        return uid
+        val uid = uidOf() ?: return null.also { trusted = null }
+        if (uid == trusted) return uid
+        val now = signerOf()
+        val pinned = signer ?: now.also { signer = it }
+        trusted = uid.takeIf { now != null && now == pinned }
+        return trusted
     }
 
     /** TSLink was uninstalled (or replaced by an app with another key). */
     fun gone(): Boolean = current() == null
 
-    fun isApp(caller: Int): Boolean = caller == cached || caller == current()
+    fun isApp(caller: Int): Boolean = caller == trusted || caller == current()
 }
 
 /**
@@ -288,14 +288,19 @@ internal class PairingStatus {
     }
 }
 
-/** app.tslink as installed now: uid and signing certificates (SHA-256), or null if it isn't. */
-private fun installedApp(): AppUid.Install? = try {
-    val pm = Shell.context.packageManager
-    val info = pm.getPackageInfo(APP_PACKAGE, android.content.pm.PackageManager.GET_SIGNING_CERTIFICATES)
-    val signers = info.signingInfo?.apkContentsSigners.orEmpty()
+/** app.tslink's uid now, or null if it isn't installed (cheap: no certificates). */
+private fun installedUid(): Int? = try {
+    Shell.context.packageManager.getPackageUid(APP_PACKAGE, 0)
+} catch (_: android.content.pm.PackageManager.NameNotFoundException) {
+    null
+}
+
+/** app.tslink's signing certificates (SHA-256, sorted, joined), or null if it isn't installed. */
+private fun installedSigner(): String? = try {
+    val info = Shell.context.packageManager.getPackageInfo(APP_PACKAGE, android.content.pm.PackageManager.GET_SIGNING_CERTIFICATES)
+    info.signingInfo?.apkContentsSigners.orEmpty()
         .map { java.security.MessageDigest.getInstance("SHA-256").digest(it.toByteArray()).joinToString("") { b -> "%02x".format(b) } }
         .sorted().joinToString(",")
-    AppUid.Install(info.applicationInfo!!.uid, signers)
 } catch (_: android.content.pm.PackageManager.NameNotFoundException) {
-    null // uninstalled: nobody is TSLink
+    null
 }
