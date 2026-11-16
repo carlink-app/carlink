@@ -250,6 +250,7 @@ class MainActivity : Activity() {
     private fun diagnosticsCard(parent: LinearLayout) {
         val card = ui.card(parent, "Diagnostics")
         card.addView(ui.button("Setup & checks", primary = false) { startActivity(Intent(this, SetupActivity::class.java)) }, fullWidth(top = 4))
+        card.addView(ui.button("Device check", primary = false) { deviceCheck() }, fullWidth(top = 8))
         card.addView(ui.button("Engine log", primary = false) { showLog() }, fullWidth(top = 8))
         diagView = ui.line("TSLink ${BuildConfig.VERSION_NAME}", size = 12f)
         card.addView(diagView)
@@ -417,6 +418,19 @@ class MainActivity : Activity() {
     // ---- Diagnostics --------------------------------------------------------
 
     /** Recent engine log (logcat as shell), to read or share after a car test. */
+    /** Encoders, encode speed and car display support, without a car (see SelfTest). */
+    private fun deviceCheck() {
+        val e = engine ?: return showMessage("Allow Shizuku first (Setup & checks).")
+        showMessage("Device check: about 15 seconds...")
+        thread {
+            val report = try { e.selfTest() } catch (t: Throwable) { "error: $t" }
+            runOnUiThread {
+                showMessage(null)
+                textDialog("Device check", report, "TSLink device check")
+            }
+        }
+    }
+
     private fun showLog() {
         val e = engine ?: run {
             diagView.text = "Start the engine first to see its log."
@@ -424,23 +438,26 @@ class MainActivity : Activity() {
         }
         thread {
             val log = try { e.logs() } catch (t: Throwable) { "error: $t" }
-            runOnUiThread {
-                val view = TextView(this).apply {
-                    text = log.ifBlank { "(empty)" }
-                    typeface = Typeface.MONOSPACE
-                    textSize = 10f
-                    setTextIsSelectable(true)
-                }
-                AlertDialog.Builder(this)
-                    .setTitle("Engine log")
-                    .setView(ScrollView(this).apply { addView(view) })
-                    .setPositiveButton("Share") { _, _ ->
-                        startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, log), "TSLink engine log"))
-                    }
-                    .setNegativeButton("Close", null)
-                    .show()
-            }
+            runOnUiThread { textDialog("Engine log", log, "TSLink engine log") }
         }
+    }
+
+    /** Monospace text with Share. */
+    private fun textDialog(title: String, text: String, shareTitle: String) {
+        val view = TextView(this).apply {
+            this.text = text.ifBlank { "(empty)" }
+            typeface = Typeface.MONOSPACE
+            textSize = 10f
+            setTextIsSelectable(true)
+        }
+        AlertDialog.Builder(this)
+            .setTitle(title)
+            .setView(ScrollView(this).apply { addView(view) })
+            .setPositiveButton("Share") { _, _ ->
+                startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text), shareTitle))
+            }
+            .setNegativeButton("Close", null)
+            .show()
     }
 
     // ---- Car (Bluetooth auto-start) -----------------------------------------

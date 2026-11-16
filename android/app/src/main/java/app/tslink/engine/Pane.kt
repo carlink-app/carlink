@@ -3,8 +3,6 @@ package app.tslink.engine
 import android.hardware.display.DisplayManager
 import android.hardware.display.VirtualDisplay
 import android.media.MediaCodec
-import android.media.MediaCodecInfo
-import android.media.MediaFormat
 import android.os.Build
 import android.os.Bundle
 import android.os.Process
@@ -29,7 +27,7 @@ class Pane(
     private val core: () -> Long,
 ) {
     private val mime = Codecs.mime(codec)
-    private val encoder: MediaCodec = MediaCodec.createEncoderByType(mime)
+    private val encoder: MediaCodec = Codecs.createEncoder(codec)
     private var surface: Surface? = null
     private var display: VirtualDisplay? = null
     private var thread: Thread? = null
@@ -96,41 +94,7 @@ class Pane(
         }
     }
 
-    private fun configureEncoder(bitrate: Int) {
-        // Optional keys go from most to least desirable; encoders reject
-        // unknown ones with IllegalArgumentException, so retry with fewer.
-        fun format(level: Int) = MediaFormat.createVideoFormat(mime, width, height).apply {
-            setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
-            setInteger(MediaFormat.KEY_BIT_RATE, bitrate)
-            setInteger(MediaFormat.KEY_FRAME_RATE, 60)
-            // Long GOP; keyframes are requested when a client (re)connects or
-            // the sender has to skip frames.
-            setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 10)
-            // Static screen: resend the last frame every 100 ms so the car
-            // stays in sync without a constant 60 fps stream.
-            setLong(MediaFormat.KEY_REPEAT_PREVIOUS_FRAME_AFTER, 100_000L)
-            if (level >= 1) {
-                setInteger(MediaFormat.KEY_MAX_B_FRAMES, 0)
-                setInteger(MediaFormat.KEY_PREPEND_HEADER_TO_SYNC_FRAMES, 1)
-            }
-            if (level >= 2) {
-                setInteger(MediaFormat.KEY_PRIORITY, 0) // realtime
-                setInteger(MediaFormat.KEY_LATENCY, 1)
-                // Keep the encoder clocked up between frames (lower encode latency).
-                setInteger(MediaFormat.KEY_OPERATING_RATE, Short.MAX_VALUE.toInt())
-            }
-        }
-        for (level in 2 downTo 0) {
-            try {
-                encoder.configure(format(level), null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
-                if (level < 2) Log.w(TAG, "encoder ${encoder.codecInfo.name} accepted format level $level of 2")
-                return
-            } catch (e: IllegalArgumentException) {
-                if (level == 0) throw e
-                encoder.reset()
-            }
-        }
-    }
+    private fun configureEncoder(bitrate: Int) = Codecs.configure(encoder, mime, width, height, bitrate)
 
     @android.annotation.SuppressLint("WrongConstant") // hidden flags (trusted, own focus, ...), as scrcpy uses
     private fun createDisplay(dpi: Int, surface: Surface): VirtualDisplay {

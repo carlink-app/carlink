@@ -37,4 +37,7 @@ interface IEngine {
     String startPairing(String secret) = 11;
     // "", "waiting", "paired <car address>" or "expired".
     String pairingResult() = 12;
+
+    // Device check without a car (JSON, see SelfTest). Takes ~15 s; not while a car is connected.
+    String selfTest() = 13;
 }

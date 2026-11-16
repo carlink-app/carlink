@@ -87,6 +87,19 @@ class EngineService : IEngine.Stub() {
 
     override fun pairingResult(): String = if (fromTSLink()) pairing else ""
 
+    override fun selfTest(): String {
+        if (!fromTSLink()) return "denied"
+        // Encoders are a limited resource: don't take them from a car session.
+        if (engine?.status?.startsWith("car connected") == true) return "error: disconnect the car first"
+        return try {
+            Shell.init()
+            SelfTest.run().toString(2)
+        } catch (t: Throwable) {
+            Log.e(TAG, "self-test failed", t)
+            "error: $t"
+        }
+    }
+
     /** A new engine starts empty: the app sends notifications, icons and what plays again. */
     private fun resyncApp() = toApp()?.invoke(JSONObject().put("t", "resync"))
 
