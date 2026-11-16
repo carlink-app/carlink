@@ -43,6 +43,8 @@ class MainActivity : Activity() {
         const val CAR_PAGE = "https://tslink.app/"
         /** Pairing results polled once a second, a bit past the engine's 2 minute window. */
         private const val PAIRING_POLLS = 130
+        /** Pairing hands back to the normal engine ~1.5 s after the code went out, plus its stop. */
+        private const val ENGINE_SWAP_MS = 4_000L
         private const val REQ_SHIZUKU = 1
         private const val REQ_BLUETOOTH = 2
         private const val REQ_NOTIFICATIONS = 3
@@ -200,6 +202,8 @@ class MainActivity : Activity() {
     private fun watchPairing(left: Int) {
         if (left <= 0 || isDestroyed) return
         call(onResult = { r ->
+            // The engine restarted with the real code: refresh the state line once it's back.
+            if (r != "waiting") window.decorView.postDelayed({ call { it.status() } }, ENGINE_SWAP_MS)
             when {
                 r.startsWith("paired ") -> showMessage(
                     "Paired with the car at ${r.removePrefix("paired ").substringBefore(':')}. " +

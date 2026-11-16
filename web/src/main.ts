@@ -1092,8 +1092,8 @@ function startQrPairing() {
 
 /** Connect with [code] at the saved address. */
 function useCode(code: string) {
-  const saved = loadSaved();
-  settings = { ...settings, code, host: saved.host, port: saved.port };
+  const { host, port } = effective(overrides); // saved address, or a dev override
+  settings = { ...settings, code, host, port };
 }
 
 /** Leave QR pairing without a result: back to the saved code (if any). */
