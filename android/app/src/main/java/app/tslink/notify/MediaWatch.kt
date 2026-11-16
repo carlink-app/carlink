@@ -32,7 +32,8 @@ class MediaWatch(
     private val msm = ctx.getSystemService(MediaSessionManager::class.java)
     private var current: MediaController? = null
     private var last: String? = null
-    private var artKey: Any? = null
+    /** Track the cached art belongs to: each metadata read gives a new Bitmap object. */
+    private var artKey: String? = null
     private var artUrl: String? = null
     private val encoder = Executors.newSingleThreadExecutor()
 
@@ -117,7 +118,7 @@ class MediaWatch(
     }
 
     /**
-     * Small JPEG of the cover art, cached per bitmap (one per track). Encoded
+     * Small JPEG of the cover art, cached per track. Encoded
      * off the main thread: the first report goes without it, a second follows.
      */
     private fun art(meta: MediaMetadata?): String? {
@@ -125,14 +126,20 @@ class MediaWatch(
             ?: meta?.getBitmap(MediaMetadata.METADATA_KEY_ART)
             ?: meta?.getBitmap(MediaMetadata.METADATA_KEY_DISPLAY_ICON)
             ?: return null
-        if (bmp === artKey) return artUrl
-        artKey = bmp
+        val key = listOf(
+            meta?.getString(MediaMetadata.METADATA_KEY_TITLE),
+            meta?.getString(MediaMetadata.METADATA_KEY_ARTIST),
+            meta?.getString(MediaMetadata.METADATA_KEY_ALBUM),
+            "${bmp.width}x${bmp.height}",
+        ).joinToString("|")
+        if (key == artKey) return artUrl
+        artKey = key
         artUrl = null
         if (encoder.isShutdown) return null // stopped
         encoder.execute {
             val url = encode(bmp)
             main.post {
-                if (artKey !== bmp || encoder.isShutdown) return@post // track changed, or stopped
+                if (artKey != key || encoder.isShutdown) return@post // track changed, or stopped
                 artUrl = url
                 report()
             }

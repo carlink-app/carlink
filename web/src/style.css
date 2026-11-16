@@ -326,10 +326,11 @@ svg { fill: currentColor; }
 /* ---- now playing ---- */
 #btn-media { position: relative; }
 #btn-media[hidden] { display: none; }
+#media-thumb.icon, #media-art.icon { background-size: 80%; background-color: #ffffff10; }
 #media-thumb, #media-art { display: grid; place-items: center; overflow: hidden; background: #3c4043 center / cover no-repeat; font-weight: 700; }
 #media-thumb { width: 56px; height: 56px; border-radius: 14px; font-size: 26px; }
 #media-eq { position: absolute; right: 8px; bottom: 8px; display: flex; gap: 2px; align-items: flex-end; height: 16px; padding: 2px 3px; border-radius: 6px; background: #000c; }
-#media-eq i { width: 3px; height: 40%; background: var(--accent); }
+#media-eq i { width: 3px; height: 40%; background: var(--np, var(--accent)); }
 #btn-media.playing #media-eq i { animation: eq 0.9s ease-in-out infinite alternate; }
 #btn-media.playing #media-eq i:nth-child(2) { animation-delay: -.3s; }
 #btn-media.playing #media-eq i:nth-child(3) { animation-delay: -.6s; }
@@ -337,7 +338,8 @@ svg { fill: currentColor; }
 #media {
   position: absolute; left: 16px; bottom: 16px; width: min(560px, calc(100% - 32px)); z-index: 4;
   display: flex; flex-direction: column; gap: 20px; padding: 24px; border-radius: 32px;
-  background: #2d2e31; box-shadow: 0 8px 32px #000a; animation: fade-in .15s ease-out;
+  background: color-mix(in srgb, var(--np, #2d2e31) 22%, #1f2023); box-shadow: 0 8px 32px #000a; animation: fade-in .15s ease-out;
+  transition: background .4s;
 }
 #media[hidden] { display: none; }
 .media-head { display: flex; align-items: center; gap: 20px; min-width: 0; }
@@ -350,7 +352,7 @@ svg { fill: currentColor; }
 .media-buttons button:active { background: #ffffff2a; }
 .media-buttons button:disabled { opacity: .35; }
 .media-buttons svg { width: 48px; height: 48px; fill: currentColor; }
-.media-buttons .play { background: var(--accent); color: #000; }
-.media-buttons .play:active { background: var(--accent); filter: brightness(.85); }
+.media-buttons .play { background: var(--np, var(--accent)); color: var(--np-fg, #000); }
+.media-buttons .play:active { background: var(--np, var(--accent)); filter: brightness(.85); }
 .media-open { min-height: 72px; border-radius: 36px; font-size: 24px; background: #ffffff14; }
 .media-open[hidden] { display: none; }

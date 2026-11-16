@@ -9,6 +9,7 @@ import { PANE_DPI, type AppInfo, type FromWorker, type PageMsg, type PaneLayout,
 import { formatCode, makeCert, weekStart } from './cert';
 import { ErrorWindow, fingerprint, LogRing, maskCode, resolveCode, shortUA, utcStamp } from './diag';
 import { afterClose, groupApps, refreshRecents } from './apps';
+import { accentFrom, textOn } from './theme';
 import { parseMedia, subtitle, type NowPlaying } from './media';
 import { drawQr, newSecret, pairedCode, qrModules, qrText } from './pairing';
 import { errorText, helpFor } from './help';
@@ -335,9 +336,46 @@ const PLAY_ICON = 'M8 5v14l11-7z';
 const PAUSE_ICON = 'M6 5h4v14H6zm8 0h4v14h-4z';
 
 /** Cover art as a background (validated data URL), else the app's first letter. */
+/** Cover art if the player gives one, else the app's icon (both vetted data URLs). */
+function mediaImage(n: NowPlaying): string | undefined {
+  if (n.art) return n.art;
+  const app = apps.find((a) => a.pkg === n.pkg);
+  return app && vettedIcon(app);
+}
+
+/** The picture as a background, else the app's first letter. */
 function paintArt(el: HTMLElement, n: NowPlaying) {
-  el.style.backgroundImage = n.art ? `url("${n.art}")` : '';
-  el.textContent = n.art ? '' : (n.app || n.title).charAt(0).toUpperCase();
+  const src = mediaImage(n);
+  el.style.backgroundImage = src ? `url("${src}")` : '';
+  el.classList.toggle('icon', !n.art && !!src); // an app icon: shown whole, not cropped
+  el.textContent = src ? '' : (n.app || n.title).charAt(0).toUpperCase();
+}
+
+/** Theme the card from the picture's most vivid colour (default accent if none). */
+let themedFrom = '';
+function themeMedia(n: NowPlaying) {
+  const src = mediaImage(n) ?? '';
+  if (src === themedFrom) return;
+  themedFrom = src;
+  const apply = (c: [number, number, number] | null) => {
+    if (themedFrom !== src) return; // the track changed meanwhile
+    for (const el of [$('media'), $('btn-media')]) {
+      el.style.setProperty('--np', c ? `rgb(${c.join(' ')})` : '');
+      el.style.setProperty('--np-fg', c ? textOn(c) : '');
+    }
+  };
+  if (!src) { apply(null); return; }
+  const img = new Image();
+  img.onload = () => {
+    const cv = document.createElement('canvas');
+    cv.width = cv.height = 24;
+    const g = cv.getContext('2d', { willReadFrequently: true });
+    if (!g) return apply(null);
+    g.drawImage(img, 0, 0, 24, 24);
+    apply(accentFrom(g.getImageData(0, 0, 24, 24).data));
+  };
+  img.onerror = () => apply(null);
+  img.src = src;
 }
 
 function setMedia(n: NowPlaying | null) {
@@ -348,6 +386,7 @@ function setMedia(n: NowPlaying | null) {
   btn.classList.toggle('playing', n.playing);
   btn.setAttribute('aria-label', `Now playing: ${n.title}`);
   paintArt($('media-thumb'), n);
+  themeMedia(n);
   if (!$('media').hidden) renderMedia();
 }
 
