@@ -23,13 +23,13 @@ There is no APK: build the phone app from source and install it over USB
    Start it via Wireless debugging or over USB (Shizuku shows how).
 2. **Build and install TSLink** over USB with `adb install` (Play Protect
    blocks installing it from a browser or file manager).
-3. **Open TSLink** and follow Setup & checks (Shizuku, battery, hotspot,
-   optional car notifications and Bluetooth auto-start), then Start engine.
-4. **Hotspot:** WPA2-Personal, "Turn off hotspot automatically" off. In
-   TSLink, Car hotspot on.
+3. **Open TSLink** and follow Setup: Shizuku, then Battery & hotspot
+   (WPA2-Personal, "Turn off hotspot automatically" off), then the optional
+   extras (car notifications, start with the car). TSLink then starts by itself.
+4. **Car hotspot:** tap Turn on car hotspot on TSLink's main screen.
 5. **In the car:** join the phone's hotspot and open https://tslink.app/.
    In TSLink tap Pair a car (scan QR) and scan the code on the car screen.
-   Or tap Type the code instead and enter the pairing code.
+   Or tap Type the code instead and enter the code the phone shows.
 
 Checklist and troubleshooting:
 [docs/CAR-TEST.md](https://github.com/tslink-app/tslink/blob/main/docs/CAR-TEST.md).

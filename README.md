@@ -51,7 +51,7 @@ Protocol and certificate details: [docs/PROTOCOL.md](docs/PROTOCOL.md).
 2. Build TSLink and install it over USB (see Build from source). Google Play
    Protect blocks installing it from a file manager or browser (it uses
    notification access), so install with `adb`.
-3. In TSLink: follow **Setup & checks**, then **Start engine** and tap **Car hotspot on**.
+3. In TSLink: follow **Setup** (three short pages), then tap **Turn on car hotspot**.
 4. In the car: join the phone's hotspot and open https://tslink.app/. In
    TSLink tap **Pair a car (scan QR)** and scan the code the car shows (or
    type the pairing code on the car page instead).

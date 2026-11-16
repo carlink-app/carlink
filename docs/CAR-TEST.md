@@ -21,24 +21,23 @@ car's Bluetooth, as usual.
      the car hotspot gives out exactly one address, 9.9.0.2
 4. **Shizuku:** install from Play, start it via Wireless debugging (Shizuku shows how).
 5. **TSLink:**
-   - Start engine, then allow Shizuku. Status shows `running on :4433`, later
-     `waiting for car · cert abc123`.
-   - Setup & checks (Diagnostics) should show every required step ready.
+   - Follow Setup (Shizuku, Battery & hotspot, Optional). The status then
+     says "Ready: waiting for the car"; More shows the certificate (`cert abc123`).
    - Turn car notifications on (optional; this also gives the car real app icons).
    - Choose car: only if you want Bluetooth auto-start (untested so far).
    - Battery: Unrestricted (Settings -> Apps -> TSLink -> Battery).
-6. **Shizuku without Wi-Fi.** Tap "Car hotspot on" (status `ok`), then turn Wi-Fi
+6. **Shizuku without Wi-Fi.** Tap "Turn on car hotspot", then turn Wi-Fi
    off or walk out of range for 2 minutes. Shizuku must still say running, and
-   "Start engine" must answer "already running". If Shizuku died, fix that first:
+   TSLink must still say Ready. If Shizuku died, fix that first:
    in the car you can't restart it without Wi-Fi.
 7. Optional: open the car page once in the car on home Wi-Fi. This caches the
    page; it won't connect yet.
 
 ## In the car
 
-8. Phone plugged in. In TSLink: Start engine, then "Car hotspot on" (status `ok`).
-   Don't use the system hotspot toggle: that one uses a private subnet the car
-   browser refuses.
+8. Phone plugged in. In TSLink: Turn on car hotspot (it then says "Car hotspot
+   is on"). Don't use the system hotspot toggle: that one uses a private
+   subnet the car browser refuses.
 9. Tesla Wi-Fi: join the phone's hotspot (not home Wi-Fi). The car's IP should be 9.9.0.2.
 10. Tesla browser: `https://tslink.app/?debug=1`. The page shows a QR code.
     In TSLink tap "Pair a car (scan QR)" and scan it; the page says "Paired"
@@ -58,7 +57,7 @@ car's Bluetooth, as usual.
     - a notification (send yourself a message)
     - minimising the browser and coming back (apps stay up to 30 s)
     - `?codec=h264` instead of the default, to compare
-13. Afterwards: "Normal hotspot", then "Stop engine".
+13. Afterwards: More > Stop TSLink (or Disconnect while connected).
 
 ## If something fails
 
@@ -69,7 +68,7 @@ Stay awake (keeps the phone screen on while charging).
 Capture:
 - A photo of the car screen with the debug overlay (its `-- env` and `-- log`
   sections are there for this) and the time.
-- In TSLink: the status line, then "Engine log", then Share.
+- In TSLink: the status line, then More > Log, then Share.
 - Shizuku's state; Hotspot -> connected devices.
 - If needed: Developer options -> Take bug report.
 

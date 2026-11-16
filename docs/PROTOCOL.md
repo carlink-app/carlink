@@ -223,14 +223,17 @@ different week (clock off).
    the QR code to connect).
 3. The page keeps connecting with the secret. The first authenticated session
    gets `{"t":"paired","code":"ABCD-EFGH-JKLM"}` and nothing else is served.
-4. The page stores the code and the address it connected to; the engine goes
-   back to the normal code about 1.5 s later and the page reconnects with it.
+4. The page stores the code and the address it connected to and closes the
+   session; the engine goes back to the normal code as soon as that session
+   closes (at most ~1.5 s after sending the code). The page reconnects with
+   short retries (every 0.3 s, handshakes cut off after 1.5 s) for 8 s, then
+   normal backoff. While the QR code is up it retries every second.
 
 The secret is exactly 20 characters from the alphabet; the phone refuses
 anything else. While pairing, the engine relays nothing but `paired` (no
 notifications, media or apps). The phone app then shows the address of the
 car that got the code: if the car didn't connect, someone else on the hotspot
-who saw the QR code may have raced it, and "New code" revokes it.
+who saw the QR code may have raced it, and "Unpair all cars" (a new code) revokes it.
 
 Typing the code on the page stays available ("Type the code instead").
 
