@@ -57,7 +57,7 @@ class EngineService : IEngine.Stub() {
     @Synchronized
     override fun startPairing(secret: String): String {
         if (!fromTSLink()) return "denied"
-        val current = engine ?: return "start the engine first"
+        val current = engine ?: return "error: TSLink is off, start it first"
         val s = pairingSecret(secret) ?: return "not a TSLink pairing code"
         current.stop(waitMs = 2_000)
         val gen = ++pairingGen

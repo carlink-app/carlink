@@ -96,7 +96,7 @@ object Setup {
         add(SetupStep(
             StepId.SHIZUKU_ALLOWED, "TSLink allowed in Shizuku",
             when (f.shizukuAllowed) {
-                true -> "Shizuku lets TSLink start its engine."
+                true -> "Shizuku lets TSLink run."
                 false -> "Allow TSLink when Shizuku asks."
                 null -> "Start Shizuku first, then allow TSLink."
             },
@@ -157,7 +157,7 @@ object Setup {
         ))
         add(SetupStep(
             StepId.CAR, "Start with the car",
-            if (f.carChosen) "The engine and car hotspot start when the phone connects to the car's Bluetooth."
+            if (f.carChosen) "TSLink and the car hotspot start when the phone connects to the car's Bluetooth."
             else "Choose your car among the paired Bluetooth devices so TSLink starts when you get in.",
             if (f.carChosen) "Change car" else "Choose car", ok(f.carChosen), optional = true,
         ))

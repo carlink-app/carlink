@@ -34,9 +34,10 @@ object Prefs {
     /**
      * The user (or auto-start) wants the engine running: whoever binds it
      * next (app, notification link) restarts it if it died (process killed,
-     * Shizuku restarted, app updated).
+     * Shizuku restarted, app updated). On by default, so TSLink starts as
+     * soon as Shizuku allows it; Stop (or the car leaving) turns it off.
      */
-    fun engineWanted(ctx: Context): Boolean = prefs(ctx).getBoolean("engine_wanted", false)
+    fun engineWanted(ctx: Context): Boolean = prefs(ctx).getBoolean("engine_wanted", true)
     fun setEngineWanted(ctx: Context, on: Boolean) = prefs(ctx).edit().putBoolean("engine_wanted", on).apply()
 
     /** Whether the running engine/hotspot were started by the car connecting (so it may stop them). */

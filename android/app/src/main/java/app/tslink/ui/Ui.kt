@@ -85,6 +85,23 @@ class Ui(private val ctx: Context) {
         return card
     }
 
+    /** A card whose content stays folded under its title until tapped (rarely needed settings). */
+    fun expander(parent: LinearLayout, title: String): LinearLayout {
+        val card = card(parent, title)
+        val header = card.getChildAt(0) as TextView
+        val body = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL; visibility = View.GONE }
+        card.addView(body)
+        fun label() { header.text = "${title.uppercase()}  ${if (body.visibility == View.VISIBLE) "▾" else "▸"}" }
+        label()
+        // The whole card toggles: the title alone is a small target.
+        card.setOnClickListener {
+            body.visibility = if (body.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+            label()
+        }
+        card.background = ripple(rounded(SURFACE, 16), 16)
+        return body
+    }
+
     private fun baseButton(label: String, onClick: () -> Unit) = Button(ctx).apply {
         text = label
         isAllCaps = false

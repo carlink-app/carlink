@@ -52,15 +52,21 @@ class MainActivity : Activity() {
 
     private val ui = Ui(this)
 
-    // Status card
+    // Status card: state, what to do in the car, the one next action.
     private lateinit var stateDot: View
     private lateinit var stateView: TextView
-    private lateinit var certView: TextView
+    private lateinit var hintView: TextView
+    private lateinit var primaryButton: Button
     private lateinit var messageView: TextView
-    private lateinit var engineButton: Button
-    private var engineRunning = false
-
+    private lateinit var codeBox: LinearLayout
     private lateinit var codeView: TextView
+    private lateinit var codeToggle: Button
+    /** Last engine state (not messages): what [render] draws. */
+    private var lastStatus: EngineStatus = EngineStatus.Stopped
+    private val engineRunning get() = lastStatus is EngineStatus.Running
+    /** Pair was tapped while TSLink was off: open the scanner once it runs. */
+    private var pendingScan = false
+
     private lateinit var hotspotChoice: LinearLayout
     private lateinit var hotspotView: TextView
     private lateinit var carName: TextView
@@ -70,6 +76,8 @@ class MainActivity : Activity() {
     private lateinit var notifSwitch: Switch
     private lateinit var carTextChoice: LinearLayout
     private lateinit var carTextView: TextView
+    private lateinit var startStopButton: Button
+    private lateinit var certView: TextView
     private lateinit var diagView: TextView
     private var engine: IEngine? = null
     /** A bind is under way or done (cleared when the user stops the engine). */
@@ -104,12 +112,9 @@ class MainActivity : Activity() {
 
         codeView.text = Prefs.code(this)
         showCar()
-        setStatus("checking engine...")
-        // Show the engine's real state even when it was started elsewhere (auto-start).
-        if (!bindIfAllowed()) {
-            showStopped()
-            setStatus("Shizuku ${if (Shizuku.pingBinder()) "hasn't allowed tslink yet" else "isn't running"}.")
-        }
+        setStatus("checking...")
+        // Show the real state even when TSLink was started elsewhere (auto-start).
+        if (!bindIfAllowed()) setStatus("stopped")
         // First launch: walk through setup (it marks itself seen).
         if (savedInstanceState == null && !Prefs.setupSeen(this)) startActivity(Intent(this, SetupActivity::class.java))
     }
@@ -118,6 +123,7 @@ class MainActivity : Activity() {
         super.onResume()
         showCar() // may have been chosen in setup
         showNotifications()
+        render() // setup may have changed (Shizuku allowed, started, stopped)
         // Shizuku may have been allowed meanwhile (in Setup): link to the engine now.
         // Not after the user stopped it: binding would start the engine's process again.
         if (engine == null) { if (Prefs.engineWanted(this)) bindIfAllowed() } else call { it.status() }
@@ -148,35 +154,36 @@ class MainActivity : Activity() {
         content.addView(ui.line("Your phone's apps on the car screen").apply { setPadding(0, 0, 0, ui.dp(16)) })
 
         statusCard(content)
-        pairingCard(content)
-        connectionCard(content)
-        carCard(content)
-        notificationsCard(content)
-        diagnosticsCard(content)
+        optionsCard(content)
+        moreCard(content)
 
         return ui.screen(window, content)
     }
 
     private fun statusCard(parent: LinearLayout) {
-        val card = ui.card(parent, "Engine")
+        val card = ui.card(parent, "Status")
         stateDot = ui.dot()
-        stateView = ui.text(18f, bold = true)
+        stateView = ui.text(20f, bold = true)
         card.addView(LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             addView(stateDot)
-            addView(stateView)
+            addView(stateView, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
         })
-        certView = ui.line(size = 12f).apply { typeface = Typeface.MONOSPACE; visibility = View.GONE }
-        card.addView(certView)
-        messageView = ui.line().apply { visibility = View.GONE }
+        hintView = ui.line().apply { visibility = View.GONE }
+        card.addView(hintView)
+        primaryButton = ui.button("", primary = true) { onPrimary() }
+        card.addView(primaryButton, fullWidth(top = 16))
+        // Right under the button: what happened when it was tapped.
+        messageView = ui.line().apply { visibility = View.GONE; setPadding(0, ui.dp(8), 0, 0) }
         card.addView(messageView)
-        engineButton = ui.button("Start engine", primary = true) { if (engineRunning) stopEngine() else startEngine() }
-        card.addView(engineButton, fullWidth(top = 12))
-    }
 
-    private fun pairingCard(parent: LinearLayout) {
-        val card = ui.card(parent, "Pairing code")
+        codeToggle = ui.textButton("Type the code instead") { toggleCode() }
+        card.addView(codeToggle, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply {
+            topMargin = ui.dp(4)
+            gravity = Gravity.CENTER_HORIZONTAL
+        })
+        codeBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; visibility = View.GONE }
         codeView = ui.text(32f, bold = true).apply {
             typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
             letterSpacing = 0.05f
@@ -184,19 +191,106 @@ class MainActivity : Activity() {
             // Not selectable: a copied code would sit in clipboard history.
             setPadding(0, ui.dp(6), 0, ui.dp(6))
         }
-        card.addView(codeView, MATCH_PARENT, WRAP_CONTENT)
-        card.addView(LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            addView(ui.line("Or type it on the car page. After a new code, pair again."), LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
-            addView(ui.textButton("New code") { newCode() })
-        })
-        card.addView(ui.button("Pair a car (scan QR)", primary = true) { pairCar() }, fullWidth(top = 12))
+        codeBox.addView(codeView, MATCH_PARENT, WRAP_CONTENT)
+        codeBox.addView(ui.line("On the car page, tap Type the code instead and enter this.").apply { gravity = Gravity.CENTER })
+        card.addView(codeBox)
     }
 
-    /** Scan the QR code on the car page; the engine then hands the pairing code to that car. */
+    private fun toggleCode() {
+        val show = codeBox.visibility != View.VISIBLE
+        codeBox.visibility = if (show) View.VISIBLE else View.GONE
+        codeToggle.text = if (show) "Hide the code" else "Type the code instead"
+    }
+
+    private fun onPrimary() = when (Home.view(setupReady(), lastStatus).primary) {
+        Primary.FINISH_SETUP -> startActivity(Intent(this, SetupActivity::class.java))
+        Primary.PAIR -> pairCar()
+        Primary.DISCONNECT -> stopEngine()
+    }
+
+    /** Pair needs Shizuku (installed, running, TSLink allowed); the other setup steps can wait. */
+    private fun setupReady() = Setup.pageReady(SetupPage.SHIZUKU, Setup.steps(setupFacts()))
+
+    private fun optionsCard(parent: LinearLayout) {
+        val card = ui.card(parent, "Options")
+        val (row, sw) = ui.switchRow("Notifications in the car") {
+            notifSwitch.isChecked = notificationsOn() // the real state follows once it changes
+            toggleNotifications()
+        }
+        notifSwitch = sw
+        card.addView(row)
+        notifView = ui.line()
+        card.addView(notifView)
+        card.addView(ui.line("Message text in the car"), fullWidth(top = 12))
+        val modes = Prefs.CarText.values()
+        carTextChoice = ui.segmented(listOf("Default", "Always", "Never")) { i ->
+            Prefs.setCarText(this, modes[i])
+            showNotifications()
+        }
+        card.addView(carTextChoice, fullWidth(top = 4))
+        carTextView = ui.line()
+        card.addView(carTextView)
+
+        card.addView(ui.text(16f).apply { text = "Start with the car" }, fullWidth(top = 20))
+        carName = ui.text(14f)
+        card.addView(carName)
+        carView = ui.line()
+        card.addView(carView)
+        carButton = ui.button("Choose car", primary = false) { chooseCar() }
+        card.addView(carButton, fullWidth(top = 8))
+    }
+
+    private fun moreCard(parent: LinearLayout) {
+        val more = ui.expander(parent, "More")
+        more.addView(ui.text(16f).apply { text = "Hotspot" }, fullWidth(top = 8))
+        hotspotChoice = ui.segmented(listOf("Car hotspot", "Normal hotspot")) { i -> setHotspot(car = i == 0) }
+        more.addView(hotspotChoice, fullWidth(top = 4))
+        hotspotView = ui.line("Car hotspot is what the Tesla browser needs. Normal hotspot: only to switch back.")
+        more.addView(hotspotView)
+        more.addView(ui.row("Phone address", Hotspot.PHONE), fullWidth(top = 8))
+        more.addView(ui.row("Car page", CAR_PAGE))
+
+        more.addView(ui.button("Unpair all cars", primary = false) { confirmUnpair() }, fullWidth(top = 16))
+        more.addView(ui.line("Makes a new code: every car pairs again with the QR code."))
+        startStopButton = ui.button("Stop TSLink", primary = false) { if (engineRunning) stopEngine() else startEngine() }
+        more.addView(startStopButton, fullWidth(top = 12))
+        more.addView(ui.button("Setup", primary = false) { startActivity(Intent(this, SetupActivity::class.java)) }, fullWidth(top = 8))
+        more.addView(ui.button("Device check", primary = false) { deviceCheck() }, fullWidth(top = 8))
+        more.addView(ui.button("Log", primary = false) { showLog() }, fullWidth(top = 8))
+        certView = ui.line(size = 12f).apply { typeface = Typeface.MONOSPACE; visibility = View.GONE }
+        more.addView(certView, fullWidth(top = 8))
+        diagView = ui.line("TSLink ${BuildConfig.VERSION_NAME}", size = 12f)
+        more.addView(diagView)
+        Prefs.devAllow(this).takeIf { it.isNotEmpty() }?.let { dev ->
+            more.addView(ui.line("DEV: car page also accepted from $dev (files/dev_allow)", size = 12f, color = Ui.WARN))
+        }
+    }
+
+    private fun confirmUnpair() {
+        AlertDialog.Builder(this)
+            .setTitle("Unpair all cars?")
+            .setMessage("Every car has to pair again with the QR code.")
+            .setPositiveButton("Unpair") { _, _ -> newCode() }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun fullWidth(top: Int = 0) = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = ui.dp(top) }
+
+    /**
+     * Scan the QR code on the car page; the engine then hands the pairing code
+     * to that car. TSLink off: start it first, the scanner opens once it runs.
+     */
     private fun pairCar() {
-        if (engine == null || !engineRunning) return showMessage("Start the engine first, then scan.")
+        if (engine == null || !engineRunning) {
+            pendingScan = true
+            startEngine()
+            return
+        }
+        openScanner()
+    }
+
+    private fun openScanner() {
         val options = GmsBarcodeScannerOptions.Builder().setBarcodeFormats(Barcode.FORMAT_QR_CODE).build()
         GmsBarcodeScanning.getClient(this, options).startScan()
             .addOnSuccessListener { barcode ->
@@ -224,68 +318,13 @@ class MainActivity : Activity() {
             when {
                 r.startsWith("paired ") -> showMessage(
                     "Paired with the car at ${r.removePrefix("paired ").substringBefore(':')}. " +
-                        "If the car didn't connect, another device may have taken the code: tap New code.",
+                        "If the car didn't connect, another device may have taken the code: More > Unpair all cars.",
                 )
                 r == "expired" -> showMessage("Pairing timed out. Open tslink.app in the car and scan again.")
                 r == "waiting" -> window.decorView.postDelayed({ watchPairing(left - 1) }, 1_000)
             }
         }) { it.pairingResult() }
     }
-
-    private fun connectionCard(parent: LinearLayout) {
-        val card = ui.card(parent, "Car connection")
-        hotspotChoice = ui.segmented(listOf("Car hotspot", "Normal hotspot")) { i -> setHotspot(car = i == 0) }
-        card.addView(hotspotChoice, fullWidth(top = 4))
-        hotspotView = ui.line("Car hotspot gives the phone the fixed address the car page connects to.")
-        card.addView(hotspotView)
-        card.addView(ui.row("Phone address", Hotspot.PHONE), fullWidth(top = 8))
-        card.addView(ui.row("Car page", CAR_PAGE))
-    }
-
-    private fun carCard(parent: LinearLayout) {
-        val card = ui.card(parent, "Car")
-        carName = ui.text(16f)
-        card.addView(carName)
-        carView = ui.line()
-        card.addView(carView)
-        carButton = ui.button("Choose car", primary = false) { chooseCar() }
-        card.addView(carButton, fullWidth(top = 12))
-    }
-
-    private fun notificationsCard(parent: LinearLayout) {
-        val card = ui.card(parent, "Notifications")
-        val (row, sw) = ui.switchRow("Show in the car") {
-            notifSwitch.isChecked = notificationsOn() // the real state follows once it changes
-            toggleNotifications()
-        }
-        notifSwitch = sw
-        card.addView(row)
-        notifView = ui.line()
-        card.addView(notifView)
-        card.addView(ui.line("Message text in the car"), fullWidth(top = 12))
-        val modes = Prefs.CarText.values()
-        carTextChoice = ui.segmented(listOf("Default", "Always", "Never")) { i ->
-            Prefs.setCarText(this, modes[i])
-            showNotifications()
-        }
-        card.addView(carTextChoice, fullWidth(top = 4))
-        carTextView = ui.line()
-        card.addView(carTextView)
-    }
-
-    private fun diagnosticsCard(parent: LinearLayout) {
-        val card = ui.card(parent, "Diagnostics")
-        card.addView(ui.button("Setup & checks", primary = false) { startActivity(Intent(this, SetupActivity::class.java)) }, fullWidth(top = 4))
-        card.addView(ui.button("Device check", primary = false) { deviceCheck() }, fullWidth(top = 8))
-        card.addView(ui.button("Engine log", primary = false) { showLog() }, fullWidth(top = 8))
-        diagView = ui.line("TSLink ${BuildConfig.VERSION_NAME}", size = 12f)
-        card.addView(diagView)
-        Prefs.devAllow(this).takeIf { it.isNotEmpty() }?.let { dev ->
-            card.addView(ui.line("DEV: car page also accepted from $dev (files/dev_allow)", size = 12f, color = Ui.WARN))
-        }
-    }
-
-    private fun fullWidth(top: Int = 0) = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = ui.dp(top) }
 
     // ---- Engine -------------------------------------------------------------
 
@@ -298,7 +337,7 @@ class MainActivity : Activity() {
             Shizuku.requestPermission(REQ_SHIZUKU)
             return
         }
-        setStatus("starting engine...")
+        setStatus("starting...")
         Prefs.setEngineWanted(this, true)
         askNotificationPermission()
         val e = engine
@@ -342,38 +381,49 @@ class MainActivity : Activity() {
     /**
      * Every engine reply and app message ends up here. Engine states
      * ("stopped", "waiting for car · cert ab12cd", "car connected (...) · cert ...")
-     * update the state line; anything else is shown as a message below it.
+     * redraw the status card; anything else is shown as a message under its button.
      */
     private fun setStatus(s: String) = runOnUiThread {
         when (val st = EngineStatus.parse(s)) {
-            EngineStatus.Stopped -> showStopped()
-            is EngineStatus.Running -> {
-                showEngine(true, st.state, if (st.connected) Ui.OK else Ui.WARN, st.cert)
-                showMessage(null)
-            }
-            is EngineStatus.Busy -> {
-                stateView.text = st.text
-                ui.setDot(stateDot, Ui.MUTED)
-            }
             is EngineStatus.Message -> {
                 showMessage(st.text)
-                // A failed start/check must not leave "Starting engine..." up.
-                if (EngineStatus.isError(s)) showStopped()
+                // A failed start/check must not leave "Starting..." up, nor a scan waiting for it.
+                if (EngineStatus.isError(s)) {
+                    pendingScan = false
+                    lastStatus = EngineStatus.Stopped
+                }
             }
+            else -> {
+                lastStatus = st
+                if (st is EngineStatus.Running) showMessage(null)
+                if (st == EngineStatus.Stopped) pendingScan = false
+            }
+        }
+        render()
+        if (pendingScan && engineRunning) {
+            pendingScan = false
+            openScanner()
         }
     }
 
-    private fun showEngine(running: Boolean, state: String, color: Int, cert: String?) {
-        engineRunning = running
-        stateView.text = state
-        ui.setDot(stateDot, color)
+    /** Draw the status card and the Start/Stop button from [lastStatus] and the setup state. */
+    private fun render() {
+        val v = Home.view(setupReady(), lastStatus)
+        stateView.text = v.state
+        ui.setDot(stateDot, when (v.color) { HomeColor.OK -> Ui.OK; HomeColor.WARN -> Ui.WARN; HomeColor.MUTED -> Ui.MUTED })
+        hintView.text = v.hint.orEmpty()
+        hintView.visibility = if (v.hint == null) View.GONE else View.VISIBLE
+        primaryButton.text = when (v.primary) {
+            Primary.FINISH_SETUP -> "Finish setup"
+            Primary.PAIR -> "Pair a car (scan QR)"
+            Primary.DISCONNECT -> "Disconnect"
+        }
+        ui.stylePrimary(primaryButton, primary = v.primary != Primary.DISCONNECT)
+        startStopButton.text = if (engineRunning) "Stop TSLink" else "Start TSLink"
+        val cert = (lastStatus as? EngineStatus.Running)?.cert
         certView.text = "Certificate $cert (the car page's debug view shows the same)"
         certView.visibility = if (cert != null) View.VISIBLE else View.GONE
-        engineButton.text = if (running) "Stop engine" else "Start engine"
-        ui.stylePrimary(engineButton, primary = !running)
     }
-
-    private fun showStopped() = showEngine(false, "Stopped", Ui.MUTED, null)
 
     private fun showMessage(s: String?) {
         messageView.text = s.orEmpty()
@@ -393,7 +443,7 @@ class MainActivity : Activity() {
     /** The engine can't report the hotspot mode, so the control shows the last mode set here. */
     private fun setHotspot(car: Boolean) {
         if (engine == null) {
-            showHotspot("Start the engine first.", Ui.WARN)
+            showHotspot("Start TSLink first.", Ui.WARN)
             return
         }
         showHotspot(if (car) "Switching to car hotspot..." else "Switching to normal hotspot...", Ui.MUTED)
@@ -451,7 +501,7 @@ class MainActivity : Activity() {
     /** Encoders, encode speed and car display support, without a car (see SelfTest). */
     private fun deviceCheck() {
         // The message line is up in the Engine card: say it where the button is.
-        val e = engine ?: return toast(if (bindIfAllowed()) "Connecting to the engine, tap again in a moment." else "Allow Shizuku first (Setup & checks).")
+        val e = engine ?: return toast(if (bindIfAllowed()) "Starting TSLink, tap again in a moment." else "Finish setup first.")
         toast("Device check: about 15 seconds...")
         thread {
             val report = try { e.selfTest() } catch (t: Throwable) { "error: $t" }
@@ -464,12 +514,12 @@ class MainActivity : Activity() {
     /** Recent engine log (logcat as shell), to read or share after a car test. */
     private fun showLog() {
         val e = engine ?: run {
-            diagView.text = "Start the engine first to see its log."
+            diagView.text = "Start TSLink first to see its log."
             return
         }
         thread {
             val log = try { e.logs() } catch (t: Throwable) { "error: $t" }
-            runOnUiThread { textDialog("Engine log", log, "TSLink engine log") }
+            runOnUiThread { textDialog("TSLink log", log, "TSLink log") }
         }
     }
 
@@ -496,7 +546,7 @@ class MainActivity : Activity() {
     private fun showCar(note: String? = null) {
         val name = Prefs.carName(this)
         carName.text = name ?: "No car chosen"
-        carView.text = note ?: if (name != null) "The engine and car hotspot start when the car connects." else "Start the engine yourself, or choose your car so it starts automatically."
+        carView.text = note ?: if (name != null) "TSLink and the car hotspot start when the car connects." else "Choose your car so TSLink starts when you get in."
         carView.setTextColor(if (note != null) Ui.WARN else Ui.MUTED)
         carButton.text = if (name != null) "Change car" else "Choose car"
     }
