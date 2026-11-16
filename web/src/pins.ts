@@ -37,14 +37,3 @@ export const removePin = (pins: readonly AppInfo[], a: AppInfo): AppInfo[] => pi
 export const unpinnedRecents = (recents: readonly AppInfo[], pins: readonly AppInfo[]): AppInfo[] =>
   recents.filter((r) => !isPinned(pins, r));
 
-/** Pins with the one at [from] moved to [to] (both clamped). */
-export function movePin(pins: readonly AppInfo[], from: number, to: number): AppInfo[] {
-  const out = [...pins];
-  if (from < 0 || from >= out.length) return out;
-  const [a] = out.splice(from, 1);
-  out.splice(Math.max(0, Math.min(to, out.length)), 0, a);
-  return out;
-}
-
-/** Where a dragged pin lands: the number of the other pins whose centre is above [y]. */
-export const dropIndex = (otherCentres: readonly number[], y: number): number => otherCentres.filter((c) => c < y).length;

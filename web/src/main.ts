@@ -13,8 +13,8 @@ import { accentFrom, textOn } from './theme';
 import { parseMedia, subtitle, type NowPlaying } from './media';
 import { drawQr, newSecret, pairedCode, qrModules, qrText } from './pairing';
 import { errorText, helpFor } from './help';
-import { attachLongPress, LONG_PRESS_MS, LONG_PRESS_SLOP } from './longpress';
-import { addPin, dropIndex, isPinned, MAX_PINS, movePin, parsePins, PINS_KEY, removePin, unpinnedRecents } from './pins';
+import { attachLongPress } from './longpress';
+import { addPin, isPinned, MAX_PINS, parsePins, PINS_KEY, removePin, unpinnedRecents } from './pins';
 import { filterApps } from './search';
 import { acceptIcons, applyCache, chunkByBytes, ICON_REQUEST_BYTES, loadIcons, MAX_CACHED, saveIcons, validIcon, type CachedIcon } from './iconcache';
 import {
@@ -958,68 +958,9 @@ function railApp(a: AppInfo, pinned: boolean): HTMLButtonElement {
   b.dataset.pkg = a.pkg;
   b.setAttribute('aria-label', pinned ? `${a.label} (pinned)` : a.label);
   b.append(appIcon(a));
-  // Hold for the menu (open, pin, close); pinned apps can also be dragged after the hold.
-  if (pinned) attachPinDrag(b, a);
-  else attachLongPress(b, () => openSheet(a));
+  attachLongPress(b, () => openSheet(a)); // hold for the menu: open, pin, close
   b.addEventListener('click', () => launch(a));
   return b;
-}
-
-/**
- * Pinned app in the sidebar: hold LONG_PRESS_MS, then either lift (the menu)
- * or drag up/down to reorder. Moving before the hold is a plain cancel.
- */
-function attachPinDrag(b: HTMLButtonElement, a: AppInfo) {
-  let timer = 0;
-  let start: { y: number; id: number } | null = null;
-  let lifted = false;
-  let dragging = false;
-  let swallowClick = false;
-  const others = () => [...$('recents').querySelectorAll<HTMLElement>('.recent.pinned')].filter((el) => el !== b);
-  const reset = () => {
-    clearTimeout(timer);
-    start = null;
-    lifted = dragging = false;
-    b.classList.remove('lifted', 'dragging');
-    b.style.transform = '';
-  };
-  b.addEventListener('pointerdown', (e) => {
-    if (start) { reset(); return; } // second finger
-    start = { y: e.clientY, id: e.pointerId };
-    timer = window.setTimeout(() => {
-      lifted = true;
-      b.classList.add('lifted');
-      try { b.setPointerCapture(e.pointerId); } catch { /* pointer gone */ }
-    }, LONG_PRESS_MS);
-  });
-  b.addEventListener('pointermove', (e) => {
-    if (!start || e.pointerId !== start.id) return;
-    const dy = e.clientY - start.y;
-    if (!lifted) { if (Math.abs(dy) > LONG_PRESS_SLOP) reset(); return; }
-    if (!dragging && Math.abs(dy) > LONG_PRESS_SLOP) { dragging = true; b.classList.add('dragging'); }
-    if (dragging) b.style.transform = `translateY(${dy}px) scale(1.12)`;
-  });
-  b.addEventListener('pointerup', (e) => {
-    if (!start || e.pointerId !== start.id) return;
-    const wasLifted = lifted;
-    const wasDragging = dragging;
-    const centres = others().map((el) => { const r = el.getBoundingClientRect(); return r.top + r.height / 2; });
-    reset();
-    if (!wasLifted) return; // a tap: the click launches
-    swallowClick = true;
-    if (!wasDragging) { openSheet(a); return; }
-    const from = pins.findIndex((p) => p.pkg === a.pkg && p.cls === a.cls);
-    const to = dropIndex(centres, e.clientY);
-    if (from >= 0 && to !== from) setPins(movePin(pins, from, to));
-  });
-  b.addEventListener('pointercancel', reset);
-  b.addEventListener('click', (e) => {
-    if (!swallowClick) return;
-    swallowClick = false;
-    e.stopImmediatePropagation();
-    e.preventDefault();
-  }, { capture: true });
-  b.addEventListener('contextmenu', (e) => e.preventDefault());
 }
 
 let launcherOn = false;

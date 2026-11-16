@@ -58,10 +58,6 @@ svg { fill: currentColor; }
 /* Closed icons shrink away. */
 .recent { position: relative; transition: background .1s, transform .18s ease-in, opacity .18s ease-in; }
 .recent.leaving { transform: scale(.4); opacity: 0; }
-/* Pinned: hold, then drag to reorder (the sidebar doesn't scroll from a pin). */
-.recent.pinned { touch-action: none; }
-.recent.lifted { background: #ffffff2a; transform: scale(1.12); }
-.recent.dragging { z-index: 2; transition: none; box-shadow: 0 6px 20px #000c; }
 #clock {
   flex: none; width: 88px; padding: 12px 0 8px; display: flex; flex-direction: column; align-items: center; gap: 6px;
   font-size: 26px; font-weight: 500; font-variant-numeric: tabular-nums;

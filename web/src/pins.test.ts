@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { addPin, isPinned, MAX_PINS, parsePins, removePin, unpinnedRecents } from './pins';
-import { dropIndex, movePin } from './pins';
 import type { AppInfo } from './protocol';
 
 const app = (pkg: string, cls = `${pkg}.Main`): AppInfo => ({ pkg, cls, label: pkg.toUpperCase() });
@@ -58,21 +57,3 @@ describe('unpinnedRecents', () => {
   });
 });
 
-describe('reordering pins', () => {
-  const p = (pkg: string) => ({ pkg, cls: 'M', label: pkg });
-  const list = [p('a'), p('b'), p('c')];
-  const pkgs = (l: { pkg: string }[]) => l.map((x) => x.pkg).join('');
-  it('moves a pin', () => {
-    expect(pkgs(movePin(list, 0, 2))).toBe('bca');
-    expect(pkgs(movePin(list, 2, 0))).toBe('cab');
-    expect(pkgs(movePin(list, 1, 1))).toBe('abc');
-    expect(pkgs(movePin(list, 0, 99))).toBe('bca');
-    expect(pkgs(movePin(list, 5, 0))).toBe('abc');
-    expect(pkgs(list)).toBe('abc'); // not changed in place
-  });
-  it('drop index from the other pins', () => {
-    expect(dropIndex([100, 200], 50)).toBe(0);
-    expect(dropIndex([100, 200], 150)).toBe(1);
-    expect(dropIndex([100, 200], 250)).toBe(2);
-  });
-});
