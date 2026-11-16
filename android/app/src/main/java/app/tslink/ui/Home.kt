@@ -5,6 +5,13 @@ enum class Primary { FINISH_SETUP, PAIR, DISCONNECT }
 
 enum class HomeColor { OK, WARN, MUTED }
 
+/**
+ * How a note reads, the same on the phone and the car page:
+ * ERROR (red) something broke; WARN (amber) needs the user or may be a
+ * problem; OK (green) worked; INFO (grey) progress and plain notes.
+ */
+enum class Tone { ERROR, WARN, OK, INFO }
+
 /** After a status: whether a Pair tap is still waiting for TSLink to run, and whether to open the scanner now. */
 data class ScanStep(val pending: Boolean, val open: Boolean)
 
@@ -44,6 +51,12 @@ object Home {
         status is EngineStatus.Busy -> ScanStep(pending = true, open = false)
         else -> ScanStep(pending = false, open = false)
     }
+
+    /**
+     * A reply shown as a note (engine replies, Shizuku refusals): failures
+     * are errors, anything else asks the user to do something.
+     */
+    fun replyTone(s: String) = if (EngineStatus.isError(s)) Tone.ERROR else Tone.WARN
 
     /**
      * The note under the button (a refusal, "Paired with the car at ...")

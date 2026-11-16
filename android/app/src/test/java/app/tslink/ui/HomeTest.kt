@@ -91,4 +91,13 @@ class HomeTest {
         assertEquals(false, Home.clearsNote(waiting, waiting))
         assertEquals(false, Home.clearsNote(waiting, EngineStatus.Stopped))
     }
+
+    @Test fun engineRepliesAsMessages() {
+        // What reaches the note through setStatus: failures are red, refusals that need the user amber.
+        assertEquals(Tone.ERROR, Home.replyTone("error: java.io.IOException: x"))
+        assertEquals(Tone.ERROR, Home.replyTone("denied"))
+        assertEquals(Tone.WARN, Home.replyTone("Shizuku isn't running. Open Shizuku and start it."))
+        assertEquals(Tone.WARN, Home.replyTone("Shizuku permission denied"))
+        assertEquals(Tone.WARN, Home.replyTone("not a TSLink pairing code"))
+    }
 }

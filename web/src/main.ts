@@ -2,7 +2,7 @@
 // Video bytes are handed to the decode worker untouched.
 
 import './style.css';
-import { Connection, type Status } from './connection';
+import { Connection, TIMED_OUT, type Status } from './connection';
 import { demoApps, demoNotifs, DEMO_H, DEMO_W, startDemo } from './demo';
 import type { Codec } from './h26x';
 import { PANE_DPI, type AppInfo, type FromWorker, type PageMsg, type PaneLayout, type PaneStats, type PhoneMsg, type ToWorker } from './protocol';
@@ -12,7 +12,7 @@ import { afterClose, groupApps, refreshRecents, resumeAction, withFront } from '
 import { accentFrom, textOn } from './theme';
 import { describe as describePhone, parsePhoneStatus } from './phonestatus';
 import { parseMedia, subtitle, type NowPlaying } from './media';
-import { drawQr, newSecret, pairedCode, pairingPace, pairingView, qrModules, qrText } from './pairing';
+import { drawQr, newSecret, pairedCode, pairingPace, pairingView, qrModules, qrStatusText, qrText } from './pairing';
 import { errorText, helpFor } from './help';
 import { attachLongPress } from './longpress';
 import { addPin, isPinned, MAX_PINS, parsePins, PINS_KEY, removePin, unpinnedRecents } from './pins';
@@ -22,7 +22,7 @@ import {
   addBanner, addToTray, callsFirst, nextExpiry, pruneExpired, removeBanner, removeFromTray, sanitizeNotif, trayBadge, trayOthers, validId,
   type Banner, type Notif,
 } from './notifs';
-import { capPane, effective, loadSaved, paneDpi, sameEndpoint, save, uiScale, validPort, type Settings } from './settings';
+import { addressError, capPane, effective, loadSaved, paneDpi, sameEndpoint, save, uiScale, validPort, type Settings } from './settings';
 import { Samples } from './stats';
 import { attachTouch } from './touch';
 
@@ -623,12 +623,20 @@ worker.onmessage = (e: MessageEvent<FromWorker>) => {
 
 let statusTimer = 0;
 let lastStatus: Status = { s: 'idle', text: '' };
+/** Pairing handshakes in a row that got no answer (see qrStatusText). */
+let unanswered = 0;
+
 function showStatus(st: Status) {
   // While pairing, failed attempts are expected (the phone hasn't scanned yet).
   if ((pairingSecret || performance.now() < pairedQuietUntil) && st.s !== 'connected') {
-    $('pair-qr-status').textContent = 'Waiting for your phone…';
+    // A handshake that times out got no answer at all: the phone isn't at that address.
+    if (st.s === 'error') unanswered = st.text.startsWith(TIMED_OUT) ? unanswered + 1 : 0;
+    const q = qrStatusText(unanswered, settings.host, settings.port);
+    $('pair-qr-status').textContent = q.text;
+    $('pair-qr-status').classList.toggle('pair-warn', q.warn);
     return;
   }
+  unanswered = 0;
   // The retry countdown changes each time; without it, repeats collapse in the log.
   if (st.s === 'error') logLine(errorText(st.text));
   lastStatus = st;
@@ -1112,9 +1120,11 @@ const pace = () => pairingPace(!!pairingSecret, performance.now(), pairedQuietUn
 
 function startQrPairing() {
   pairingSecret = newSecret();
+  unanswered = 0;
   const canvas = $<HTMLCanvasElement>('pair-qr-canvas');
   drawQr(canvas, qrModules(qrText(pairingSecret)), 300, devicePixelRatio || 1);
   $('pair-qr-status').textContent = 'Waiting for your phone…';
+  $('pair-qr-status').classList.remove('pair-warn');
   $('pair-qr').hidden = false;
   $('pair-done').hidden = true;
   $('pairing-form').hidden = true;
@@ -1180,6 +1190,7 @@ function showPairing(on: boolean) {
   $<HTMLInputElement>('f-host').value = s.host;
   $<HTMLInputElement>('f-port').value = String(s.port);
   $('f-error').textContent = '';
+  $('f-address-error').textContent = '';
   $('f-cancel').hidden = !s.code && !DEMO;
   $('pair-qr-cancel').hidden = !s.code && !DEMO;
   // One screen for the first visit and the gear: the QR code first, typing
@@ -1203,6 +1214,21 @@ $<HTMLInputElement>('f-code').addEventListener('input', (e) => {
   }
 });
 
+// The phone's address, on every pairing view (a QR code too): keeps the code
+// or QR secret in use and reconnects there. Normally the car hotspot default.
+$('f-address-use').addEventListener('click', () => {
+  const host = $<HTMLInputElement>('f-host').value.trim();
+  const portText = $<HTMLInputElement>('f-port').value;
+  const err = addressError(host, portText);
+  $('f-address-error').textContent = err;
+  if (err) return;
+  const port = validPort(portText)!;
+  save({ ...loadSaved(), host, port });
+  settings = { ...settings, host, port };
+  if (!DEMO) conn.restart();
+  toast(`Connecting to ${host}:${port}`);
+});
+
 form.addEventListener('submit', (e) => {
   e.preventDefault();
   const saved = loadSaved();
@@ -1210,7 +1236,7 @@ form.addEventListener('submit', (e) => {
   const host = $<HTMLInputElement>('f-host').value.trim();
   const port = validPort($<HTMLInputElement>('f-port').value);
   const err = code.replace(/[^A-Z0-9]/g, '').length < 4 ? 'Enter the pairing code shown on the phone.'
-    : !host ? 'Enter the phone address.' : !port ? 'Port must be 1–65535.' : '';
+    : addressError(host, $<HTMLInputElement>('f-port').value);
   $('f-error').textContent = err;
   if (err) return;
   pairingSecret = null; // typed a code instead

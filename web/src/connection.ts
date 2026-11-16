@@ -42,6 +42,8 @@ const DEAD_MS = 4000;
 const BACKOFF_MIN_MS = 1000;
 const BACKOFF_MAX_MS = 5000;
 export const REJECTED = 'Pairing code rejected';
+/** Status text when a handshake gets no answer in time (nothing at that address). */
+export const TIMED_OUT = 'Timed out (phone unreachable?)';
 export const NO_WEBTRANSPORT = 'This browser has no WebTransport, so TSLink can\'t connect here';
 
 const enc = new TextEncoder();
@@ -152,7 +154,7 @@ export class Connection {
     closed.catch(() => { /* raced below */ });
 
     const readyMs = this.hooks.connectTimeoutMs?.() ?? READY_TIMEOUT_MS;
-    await withTimeout(Promise.race([wt.ready, closed]), readyMs, 'Timed out (phone unreachable?)');
+    await withTimeout(Promise.race([wt.ready, closed]), readyMs, TIMED_OUT);
     if (!live()) return;
 
     // Control stream: the phone speaks first (challenge).

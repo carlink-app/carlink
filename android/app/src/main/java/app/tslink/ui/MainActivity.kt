@@ -332,16 +332,16 @@ class MainActivity : Activity() {
         GmsBarcodeScanning.getClient(this, options).startScan()
             .addOnSuccessListener { barcode ->
                 val secret = Pairing.secretFrom(barcode.rawValue)
-                    ?: return@addOnSuccessListener showMessage("That isn't a TSLink pairing code. Open tslink.app in the car.")
+                    ?: return@addOnSuccessListener showMessage("That isn't a TSLink pairing code. Open tslink.app in the car.", Tone.WARN)
                 showMessage("Pairing...")
                 call(onResult = { r ->
-                    if (r != "pairing") return@call showMessage(r)
+                    if (r != "pairing") return@call showMessage(r, Home.replyTone(r))
                     showMessage("Pairing: the car connects in a few seconds. Keep the car page open.")
                     pairingUntil = SystemClock.uptimeMillis() + PAIRING_POLLS * 1_000L
                     watchPairing(PAIRING_POLLS)
                 }) { it.startPairing(secret) }
             }
-            .addOnFailureListener { e -> showMessage("error: scanner unavailable (${e.message})") }
+            .addOnFailureListener { e -> showMessage("error: scanner unavailable (${e.message})", Tone.ERROR) }
     }
 
     /**
@@ -360,8 +360,9 @@ class MainActivity : Activity() {
                 r.startsWith("paired ") -> showMessage(
                     "Paired with the car at ${r.removePrefix("paired ").substringBefore(':')}. " +
                         "If the car didn't connect, another device may have taken the code: More > Unpair all cars.",
+                    Tone.OK,
                 )
-                r == "expired" -> showMessage("Pairing timed out. Open tslink.app in the car and scan again.")
+                r == "expired" -> showMessage("Pairing timed out. Open tslink.app in the car and scan again.", Tone.WARN)
                 r == "waiting" -> window.decorView.postDelayed({ watchPairing(left - 1) }, 1_000)
             }
         }) { it.pairingResult() }
@@ -430,7 +431,7 @@ class MainActivity : Activity() {
         pendingScan = scan.pending
         when (st) {
             is EngineStatus.Message -> {
-                showMessage(st.text)
+                showMessage(st.text, Home.replyTone(s))
                 // A failed start/check must not leave "Starting..." up.
                 if (EngineStatus.isError(s)) lastStatus = EngineStatus.Stopped
             }
@@ -466,9 +467,9 @@ class MainActivity : Activity() {
         certView.visibility = if (cert != null) View.VISIBLE else View.GONE
     }
 
-    private fun showMessage(s: String?) {
+    private fun showMessage(s: String?, tone: Tone = Tone.INFO) {
         messageView.text = s.orEmpty()
-        messageView.setTextColor(if (s != null && EngineStatus.isError(s)) Ui.ERR else Ui.MUTED)
+        messageView.setTextColor(ui.color(tone))
         messageView.visibility = if (s.isNullOrEmpty()) View.GONE else View.VISIBLE
     }
 
@@ -486,15 +487,15 @@ class MainActivity : Activity() {
      * can't report the mode, so the button shows what was set from here.
      */
     private fun carHotspot() {
-        if (engine == null) return showMessage("Start TSLink first.")
+        if (engine == null) return showMessage("Start TSLink first.", Tone.WARN)
         showMessage("Turning on the car hotspot...")
         call(onResult = { r ->
             if (r == "ok") {
                 carHotspotOn = true
                 render()
-                showMessage("Car hotspot is on. Join it from the car, then open tslink.app.")
+                showMessage("Car hotspot is on. Join it from the car, then open tslink.app.", Tone.OK)
             } else {
-                showMessage("error: hotspot: $r")
+                showMessage("error: hotspot: $r", Tone.ERROR)
             }
         }) { it.carHotspot(true) }
     }

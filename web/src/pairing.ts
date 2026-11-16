@@ -75,3 +75,19 @@ export function pairingPace(pairing: boolean, now: number, quietUntil: number): 
   if (now < quietUntil) return { retryMs: PAIRED_RETRY_MS, connectTimeoutMs: PAIRING_CONNECT_MS };
   return { retryMs: undefined, connectTimeoutMs: undefined };
 }
+
+/** Handshakes in a row that got no answer before the QR screen says the address may be wrong. */
+const UNREACHABLE_AFTER = 2;
+
+/**
+ * The line under the QR code. A phone that answers but hasn't scanned yet
+ * fails the handshake at once: keep waiting. Handshakes that get no answer
+ * at all ([unanswered] in a row) mean the phone isn't at that address.
+ */
+export function qrStatusText(unanswered: number, host: string, port: number): { text: string; warn: boolean } {
+  if (unanswered < UNREACHABLE_AFTER) return { text: 'Waiting for your phone…', warn: false };
+  return {
+    text: `Can't reach the phone at ${host}:${port}. Is the car on the phone's hotspot? Otherwise check the address under Advanced.`,
+    warn: true,
+  };
+}

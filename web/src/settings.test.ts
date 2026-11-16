@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_HOST, DEFAULT_PORT } from './protocol';
-import { effective, endpoint, loadSaved, paneDpi, sameEndpoint, save, uiScale, validPort, type Settings, capPane, MAX_PANE_PIXELS } from './settings';
+import { addressError, effective, endpoint, loadSaved, paneDpi, sameEndpoint, save, uiScale, validPort, type Settings, capPane, MAX_PANE_PIXELS } from './settings';
 
 function memoryStorage(): Storage {
   const m = new Map<string, string>();
@@ -152,5 +152,18 @@ describe('capPane', () => {
     expect(Math.abs(c.w / c.h - 3724 / 1922)).toBeLessThan(0.01);
     // Same layout in dp (within rounding): width / dpi stays.
     expect(Math.abs(c.w / c.dpi - 3724 / 481)).toBeLessThan(0.05);
+  });
+});
+
+describe('addressError', () => {
+  it('accepts an address and port', () => {
+    expect(addressError('192.168.50.253', '4433')).toBe('');
+  });
+  it('needs an address', () => {
+    expect(addressError('  ', '4433')).toBe('Enter the phone address.');
+  });
+  it('needs a port in range', () => {
+    expect(addressError('9.9.0.1', '0')).toBe('Port must be 1–65535.');
+    expect(addressError('9.9.0.1', 'abc')).toBe('Port must be 1–65535.');
   });
 });

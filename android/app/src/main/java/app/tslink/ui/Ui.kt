@@ -31,8 +31,17 @@ class Ui(private val ctx: Context) {
         val ON_ACCENT = Color.parseColor("#062e6f")
         val OK = Color.parseColor("#81c995")
         val WARN = Color.parseColor("#fdd663")
+        // Tones (Tone): the same three on the car page (web/src/style.css --ok/--warn/--err).
         val ERR = Color.parseColor("#f28b82")
         val SELECTED = Color.parseColor("#1f3a5f")
+    }
+
+    /** Text colour for a note's [Tone]. */
+    fun color(tone: Tone) = when (tone) {
+        Tone.ERROR -> ERR
+        Tone.WARN -> WARN
+        Tone.OK -> OK
+        Tone.INFO -> MUTED
     }
 
     fun dp(v: Int) = (v * ctx.resources.displayMetrics.density).toInt()

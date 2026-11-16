@@ -122,23 +122,27 @@
         <input id="f-code" name="code" placeholder="ABCD-EFGH-JKLM" autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false" maxlength="20" aria-describedby="f-code-hint" required>
         <span id="f-code-hint" class="field-hint"></span>
       </label>
-      <details id="f-advanced">
-        <summary>Advanced: phone address</summary>
-        <div class="row">
-          <label class="grow">Phone address
-            <input id="f-host" name="host" inputmode="decimal" spellcheck="false" required>
-          </label>
-          <label>Port
-            <input id="f-port" name="port" inputmode="numeric" pattern="[0-9]*" required>
-          </label>
-        </div>
-      </details>
       <p id="f-error" class="form-error"></p>
       <div class="row buttons">
         <button type="button" id="f-cancel" class="secondary">Close</button>
         <button type="submit" class="primary">Save &amp; connect</button>
       </div>
     </form>
+    <details id="f-advanced">
+      <summary>Advanced: phone address</summary>
+      <div class="row">
+        <label class="grow">Phone address
+          <input id="f-host" name="host" inputmode="decimal" spellcheck="false">
+        </label>
+        <label>Port
+          <input id="f-port" name="port" inputmode="numeric" pattern="[0-9]*">
+        </label>
+      </div>
+      <p id="f-address-error" class="form-error"></p>
+      <div class="row buttons">
+        <button type="button" id="f-address-use" class="secondary">Use this address</button>
+      </div>
+    </details>
     <section id="display" aria-labelledby="display-h" hidden>
       <h2 id="display-h">Display</h2>
       <div class="setting">

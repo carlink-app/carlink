@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { drawQr, newSecret, pairedCode, pairingPace, pairingView, QR_PREFIX, qrModules, qrText, SECRET_LENGTH } from './pairing';
+import { drawQr, newSecret, pairedCode, pairingPace, qrStatusText, pairingView, QR_PREFIX, qrModules, qrText, SECRET_LENGTH } from './pairing';
 
 describe('pairing', () => {
   it('makes secrets from the code alphabet', () => {
@@ -102,5 +102,18 @@ describe('pairingPace', () => {
   });
   it('a QR code shown again wins over the quiet period', () => {
     expect(pairingPace(true, 100, 8100)).toEqual({ retryMs: 1000, connectTimeoutMs: 1500 });
+  });
+});
+
+describe('qrStatusText', () => {
+  it('waits while the phone answers (not scanned yet) or after a single miss', () => {
+    expect(qrStatusText(0, '9.9.0.1', 4433)).toEqual({ text: 'Waiting for your phone…', warn: false });
+    expect(qrStatusText(1, '9.9.0.1', 4433)).toEqual({ text: 'Waiting for your phone…', warn: false });
+  });
+  it('says the address may be wrong once nothing answers twice in a row', () => {
+    expect(qrStatusText(2, '9.9.0.1', 4433)).toEqual({
+      text: "Can't reach the phone at 9.9.0.1:4433. Is the car on the phone's hotspot? Otherwise check the address under Advanced.",
+      warn: true,
+    });
   });
 });

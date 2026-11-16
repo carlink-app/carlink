@@ -85,3 +85,10 @@ export function endpoint(s: Pick<Settings, 'host' | 'port'>): string {
   const host = s.host.includes(':') && !s.host.startsWith('[') ? `[${s.host}]` : s.host;
   return `https://${host}:${s.port}`;
 }
+
+/** Why [host]/[port] can't be used as the phone's address, or '' if they can. */
+export function addressError(host: string, port: string): string {
+  if (!host.trim()) return 'Enter the phone address.';
+  if (!validPort(port)) return 'Port must be 1–65535.';
+  return '';
+}
