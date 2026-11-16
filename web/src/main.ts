@@ -287,6 +287,11 @@ function openNotif(n: Notif) {
   showOpening(n.app, n.icon, OPENING_NOTIF_MS);
   dismiss(n.id);
   showTray(false);
+  // The app comes up on the car screen: in front, like a launch (not behind the launcher).
+  current = n.pkg;
+  const app = apps.find((a) => a.pkg === n.pkg);
+  if (app) setRecents([app, ...recents.filter((r) => r.pkg !== app.pkg)]);
+  showLauncher(false);
 }
 
 function setTray(next: Notif[]) {
