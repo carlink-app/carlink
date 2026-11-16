@@ -251,3 +251,15 @@ Car to phone: `{"t":"media-cmd","a":"play"}` with `a` one of `play`, `pause`,
 `next`, `prev`. The phone app runs it on the media session (it reads sessions
 with its notification access); without notification access nothing is sent.
 
+## Phone status
+
+Phone to car after `hello`, then whenever it changes (checked every 10 s):
+
+```
+{"t":"phone","bat":76,"chg":true,"sig":3,"net":"LTE"}
+```
+
+`bat` 0-100, `chg` charging, `sig` signal bars 0-4 (-1: no service), `net`
+one of `5G`, `LTE`, `3G`, `2G` or empty. Parts the phone can't read are left
+out. The page shows them above the sidebar clock.
+

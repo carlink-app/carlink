@@ -345,3 +345,18 @@ svg { fill: currentColor; }
 .media-buttons .play:active { background: var(--np, var(--accent)); filter: brightness(.85); }
 .media-open { min-height: 72px; border-radius: 36px; font-size: 24px; background: #ffffff14; }
 .media-open[hidden] { display: none; }
+
+/* ---- phone battery and signal, above the clock ---- */
+#phone-status { display: grid; grid-template-columns: auto auto; align-items: center; justify-items: center; gap: 4px 6px; font-size: 15px; font-weight: 600; color: var(--muted); }
+#phone-status[hidden] { display: none; }
+#signal { display: flex; align-items: flex-end; gap: 2px; height: 16px; }
+#signal i { width: 4px; border-radius: 1px; background: #ffffff33; }
+#signal i:nth-child(1) { height: 25%; } #signal i:nth-child(2) { height: 50%; } #signal i:nth-child(3) { height: 75%; } #signal i:nth-child(4) { height: 100%; }
+#signal[data-bars="1"] i:nth-child(-n+1), #signal[data-bars="2"] i:nth-child(-n+2),
+#signal[data-bars="3"] i:nth-child(-n+3), #signal[data-bars="4"] i:nth-child(-n+4) { background: var(--fg); }
+#signal.none { opacity: .4; }
+#battery { position: relative; width: 26px; height: 13px; border: 2px solid var(--muted); border-radius: 3px; }
+#battery::after { content: ""; position: absolute; right: -5px; top: 2px; width: 3px; height: 5px; border-radius: 0 1px 1px 0; background: var(--muted); }
+#battery-fill { position: absolute; left: 1px; top: 1px; bottom: 1px; border-radius: 1px; background: var(--fg); }
+#battery.low #battery-fill { background: var(--err); }
+#battery.charging #battery-fill { background: var(--ok, #81c995); }

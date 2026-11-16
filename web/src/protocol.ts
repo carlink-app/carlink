@@ -63,6 +63,8 @@ export type PhoneMsg =
   | { t: 'pane'; id: number; w: number; h: number; codec: Codec }
   | { t: 'apps'; list: AppInfo[] }
   | { t: 'app-icons'; list: { pkg: string; ih: string; icon: string }[] }
+  /** Battery and mobile signal for the sidebar; missing parts couldn't be read. */
+  | { t: 'phone'; bat?: number; chg?: boolean; sig?: number; net?: string }
   /** What plays on the phone (or `none`). */
   | { t: 'media'; none?: boolean; pkg?: string; app?: string; title?: string; artist?: string; playing?: boolean; prev?: boolean; next?: boolean; art?: string }
   /** QR pairing: the real pairing code, for the car that showed the QR code. */

@@ -36,6 +36,7 @@ class Engine(
     private var handedOver = false
     companion object {
         const val MAX_PANES = 4
+        const val PHONE_STATUS_MS = 10_000L
         private val SIZE = 320..4096
         private val DPI = 72..640
         private const val APPS_TTL_MS = 30_000L
@@ -80,6 +81,17 @@ class Engine(
     private fun sessionMsg(up: Boolean) = JSONObject().put("t", "session").put("up", up)
 
     /** The app shows "connected to car" on the phone (lock screen included). */
+    /** Battery and signal for the car's sidebar: sent when they change, checked every [PHONE_STATUS_MS]. */
+    private var lastPhoneStatus = ""
+    private val phoneStatus = object : Runnable {
+        override fun run() {
+            if (core.get() == 0L || !sessionUp) return
+            val m = try { PhoneStatus.read() } catch (e: Exception) { null }
+            m?.toString()?.takeIf { it != lastPhoneStatus }?.let { lastPhoneStatus = it; send(m) }
+            handler.postDelayed(this, PHONE_STATUS_MS)
+        }
+    }
+
     private fun reportSession(up: Boolean) {
         sessionUp = up
         toApp?.invoke(sessionMsg(up))
@@ -274,6 +286,10 @@ class Engine(
                 activeNotifs.values.filter { (n, at) -> showNow(n, at, now) }
                     .forEach { send(JSONObject(it.first.toString()).put("replay", true)) }
                 media?.let { send(it) }
+                // Battery and signal: now, then whenever they change.
+                lastPhoneStatus = ""
+                handler.removeCallbacks(phoneStatus)
+                handler.post(phoneStatus)
             }
             "layout" -> layout(m)
             "apps" -> {

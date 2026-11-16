@@ -10,6 +10,7 @@ import { formatCode, makeCert, weekStart } from './cert';
 import { ErrorWindow, fingerprint, LogRing, maskCode, resolveCode, shortUA, utcStamp } from './diag';
 import { afterClose, groupApps, refreshRecents } from './apps';
 import { accentFrom, textOn } from './theme';
+import { describe as describePhone, parsePhoneStatus } from './phonestatus';
 import { parseMedia, subtitle, type NowPlaying } from './media';
 import { drawQr, newSecret, pairedCode, qrModules, qrText } from './pairing';
 import { errorText, helpFor } from './help';
@@ -181,6 +182,7 @@ const conn = new Connection({
   onStatus: showStatus,
   onMessage,
   onSession: () => {
+    $('phone-status').hidden = true; // until this phone sends its status
     performance.mark('tslink:session');
     firstFrameMarked = false;
     rtt.clear();
@@ -231,6 +233,7 @@ function onMessage(m: PhoneMsg) {
     case 'app-icons': if (Array.isArray(m.list)) onIcons(m.list); break;
     case 'paired': onPaired(m.code); break;
     case 'media': setMedia(parseMedia(m as Record<string, unknown>)); break;
+    case 'phone': showPhoneStatus(m as Record<string, unknown>); break;
     case 'rate': rateKbps = Number(m.kbps) || 0; break;
     case 'error': toast(`Phone: ${m.msg}`); break;
     case 'notif': {
@@ -984,6 +987,24 @@ $('btn-back').addEventListener('click', () => {
 
 // ---------- clock + debug ----------
 
+/** Battery and signal above the clock, like Android Auto's status bar. */
+function showPhoneStatus(m: Record<string, unknown>) {
+  const s = parsePhoneStatus(m);
+  $('phone-status').hidden = s.battery === null && s.signal === null;
+  const sig = $('signal');
+  sig.hidden = s.signal === null;
+  sig.dataset.bars = String(Math.max(0, s.signal ?? 0));
+  sig.classList.toggle('none', s.signal === -1);
+  $('net').textContent = s.signal === -1 ? '✕' : s.network;
+  const bat = $('battery');
+  bat.hidden = $('battery-pct').hidden = s.battery === null;
+  $('battery-fill').style.width = `calc(${s.battery ?? 0}% - 2px)`;
+  bat.classList.toggle('low', (s.battery ?? 100) <= 15 && !s.charging);
+  bat.classList.toggle('charging', s.charging);
+  $('battery-pct').textContent = s.battery === null ? '' : `${s.battery}${s.charging ? '⚡' : ''}`;
+  $('clock').setAttribute('aria-label', `Clock (tap for debug info). ${describePhone(s)}`);
+}
+
 function tickClock() {
   const d = new Date();
   $('clock-time').textContent = `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`;
@@ -1199,6 +1220,7 @@ if (DEMO) {
   setApps(demoApps());
   // Fake phone notifications through the real message path, for QA.
   for (const [ms, m] of demoNotifs()) setTimeout(() => onMessage(m), ms);
+  onMessage({ t: 'phone', bat: 76, chg: true, sig: 3, net: 'LTE' });
   onMessage({ t: 'media', pkg: 'com.spotify.music', app: 'Spotify', title: 'Night Drive', artist: 'Demo Band', playing: true, prev: true, next: true });
   void startDemo(forwardFrame, (msg) => showStatus({ s: 'error', text: msg }));
 } else if (!settings.code) {
