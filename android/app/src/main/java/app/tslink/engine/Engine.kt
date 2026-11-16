@@ -52,6 +52,9 @@ class Engine(
     private val thread = HandlerThread("engine").apply { start() }
     private val handler = Handler(thread.looper)
     private val panes = HashMap<Int, Pane>()
+    /** Panes exist (they hold hardware encoders): read from other threads (Device check). */
+    @Volatile var hasPanes = false
+        private set
     private val phonePower by lazy { PhonePower(handler) }
     /** Bumped per session: pending icon batches of an older one are dropped. */
     private var iconGeneration = 0
@@ -384,6 +387,7 @@ class Engine(
         }
         wanted.forEach { (id, w, h, dpi) -> layoutPane(id, w, h, dpi) }
         (panes.keys - wanted.map { it[0] }.toSet()).forEach { panes.remove(it)?.release() }
+        hasPanes = panes.isNotEmpty()
         if (panes.values.none { it.sharesPhonePower }) phonePower.stop()
     }
 
@@ -398,6 +402,7 @@ class Engine(
                 Log.i(TAG, "pane $id re-created: ${existing.requestedWidth}x${existing.requestedHeight}@${existing.dpi} ${existing.codec} -> ${w}x$h@$dpi $codec")
             }
             panes.remove(id)?.release()
+            hasPanes = panes.isNotEmpty()
             val pane = try {
                 Pane(id, w, h, dpi, codec, level, core::get)
             } catch (e: Exception) {
@@ -410,6 +415,7 @@ class Engine(
                 return layoutPane(id, w, h, dpi)
             }
             panes[id] = pane
+            hasPanes = true
             if (pane.sharesPhonePower) phonePower.start()
             handler.removeCallbacks(guard)
             handler.postDelayed(guard, GUARD_MS)
@@ -419,13 +425,15 @@ class Engine(
         send(
             JSONObject().put("t", "pane").put("id", id).put("w", pane.width).put("h", pane.height).put("codec", codec)
                 // What the phone put back on this pane: a reloaded page shows it instead of its launcher.
-                .apply { lastLaunch[id]?.let { put("front", it.first) } },
+                // Only if it's still there (it may have exited: back key, crash); unknown counts as there.
+                .apply { lastLaunch[id]?.first?.takeIf { Apps.isOn(it, pane.displayId) != false }?.let { put("front", it) } },
         )
     }
 
     private fun releasePanes() {
         panes.values.forEach { it.release() }
         panes.clear()
+        hasPanes = false
         phonePower.stop()
         // A new session starts empty; the page re-sends what it was showing.
         lastLaunch.clear()

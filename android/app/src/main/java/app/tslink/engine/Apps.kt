@@ -271,6 +271,9 @@ object Apps {
         }
     }
 
+    /** Whether [pkg] has a task on [displayId]; null if that can't be read. */
+    fun isOn(pkg: String, displayId: Int): Boolean? = tasksOn(displayId)?.any { (_, pkgs) -> pkg in pkgs }
+
     /** Root tasks on a display with the packages in them (hidden API); null if unavailable. */
     private fun tasksOn(displayId: Int): List<Pair<Int, Set<String>>>? {
         val atm = taskManager ?: return null

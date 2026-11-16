@@ -284,15 +284,18 @@ function remember(id: string) {
   if (dismissed.size > 200) dismissed.delete(dismissed.values().next().value!);
 }
 
-/** Open a notification's app on the car (the phone opens it; see notif-open). */
 /** [pkg] is in front on the car screen (the phone says so): sidebar and launcher follow. */
 function showFront(pkg: string) {
   current = pkg;
   const next = withFront(recents, apps, pkg);
   if (next) setRecents(next);
+  // Not on the sidebar yet: the app list usually comes after the pane; add it then.
+  frontPending = next ? null : pkg;
   showLauncher(false);
 }
+let frontPending: string | null = null;
 
+/** Open a notification's app on the car (the phone opens it; see notif-open). */
 function openNotif(n: Notif) {
   send({ t: 'notif-open', id: n.id });
   showOpening(n.app, n.icon, OPENING_NOTIF_MS);
@@ -710,6 +713,11 @@ async function onApps(list: AppInfo[]) {
   const valid = list.filter((a) => a && typeof a.pkg === 'string');
   missingIcons = applyCache(valid, iconCache).filter((p) => p.length <= MAX_PKG_CHARS && PKG_RE.test(p)).slice(0, MAX_CACHED);
   setApps(valid);
+  if (frontPending && frontPending === current) {
+    const next = withFront(recents, apps, frontPending);
+    if (next) setRecents(next);
+  }
+  frontPending = null;
   performance.measure('tslink:apps', { start: t0, end: performance.now(), detail: { count: apps.length, missingIcons: missingIcons.length } });
   void saveIcons(new Map(), new Set(valid.map((a) => a.pkg))); // forget uninstalled apps
   // Asked for at the first frame; if video is already running, now; the timer

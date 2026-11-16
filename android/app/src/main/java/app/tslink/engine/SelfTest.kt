@@ -44,13 +44,14 @@ object SelfTest {
         val r = JSONObject().put("codec", codec).put("size", "${w}x$h")
         val encoder = try { Codecs.createEncoder(codec) } catch (e: Exception) { return r.put("error", e.toString()) }
         r.put("encoder", encoder.codecInfo.name)
-        val latencies = ArrayList<Long>()
+        val latencies = java.util.Collections.synchronizedList(ArrayList<Long>())
         var frames = 0
         var bytes = 0L
         var error: String? = null
+        var input: android.view.Surface? = null
         try {
             Codecs.configure(encoder, Codecs.mime(codec), w, h, if (codec == "hevc") 16_000_000 else 20_000_000)
-            val surface = encoder.createInputSurface()
+            val surface = encoder.createInputSurface().also { input = it }
             encoder.start()
             val drain = Thread {
                 val info = MediaCodec.BufferInfo()
@@ -89,7 +90,6 @@ object SelfTest {
             }
             encoder.signalEndOfInputStream()
             drain.join(2_000)
-            surface.release()
             r.put("drawn", n)
         } catch (e: Exception) {
             error = e.toString()
@@ -97,9 +97,11 @@ object SelfTest {
         } finally {
             try { encoder.stop() } catch (_: Exception) {}
             encoder.release()
+            input?.release() // also when drawing failed
         }
-        latencies.sort()
-        fun pct(p: Double) = if (latencies.isEmpty()) null else latencies[((latencies.size - 1) * p).toInt()] / 1_000_000.0
+        // The encoder is released: the drain thread has stopped writing (or will, shortly). Copy, then sort.
+        val sorted = synchronized(latencies) { latencies.toMutableList() }.apply { sort() }
+        fun pct(p: Double) = if (sorted.isEmpty()) null else sorted[((sorted.size - 1) * p).toInt()] / 1_000_000.0
         return r.put("fps", frames / SECONDS.toDouble())
             .put("latencyMsP50", pct(0.5))
             .put("latencyMsP95", pct(0.95))

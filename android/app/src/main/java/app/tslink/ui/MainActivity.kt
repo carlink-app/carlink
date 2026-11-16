@@ -81,6 +81,7 @@ class MainActivity : Activity() {
         }
 
         override fun onServiceDisconnected(name: ComponentName) {
+            binding = false
             engine = null
             setStatus("engine stopped")
         }
@@ -116,7 +117,8 @@ class MainActivity : Activity() {
         showCar() // may have been chosen in setup
         showNotifications()
         // Shizuku may have been allowed meanwhile (in Setup): link to the engine now.
-        if (engine == null) bindIfAllowed() else call { it.status() }
+        // Not after the user stopped it: binding would start the engine's process again.
+        if (engine == null) { if (Prefs.engineWanted(this)) bindIfAllowed() } else call { it.status() }
     }
 
     private fun toast(s: String) = android.widget.Toast.makeText(this, s, android.widget.Toast.LENGTH_LONG).show()
@@ -124,9 +126,15 @@ class MainActivity : Activity() {
     /** Bind the engine service if Shizuku runs and allows us; false if not. */
     private fun bindIfAllowed(): Boolean {
         if (!Shizuku.pingBinder() || Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) return false
-        Shizuku.bindUserService(EngineArgs.args, connection)
+        if (!binding) { // once: onCreate and onResume both get here before it connects
+            binding = true
+            Shizuku.bindUserService(EngineArgs.args, connection)
+        }
         return true
     }
+
+    /** A bind is under way or done (cleared when the user stops the engine). */
+    private var binding = false
 
     override fun onDestroy() {
         Shizuku.removeRequestPermissionResultListener(permissionListener)
@@ -295,7 +303,7 @@ class MainActivity : Activity() {
         Prefs.setEngineWanted(this, true)
         askNotificationPermission()
         val e = engine
-        if (e != null) call { it.startAndStatus() } else Shizuku.bindUserService(EngineArgs.args, connection)
+        if (e != null) call { it.startAndStatus() } else bindIfAllowed()
     }
 
     /** For the "Connected to car" notification (Android 13+ asks; optional, asked once). */
@@ -311,6 +319,7 @@ class MainActivity : Activity() {
         call { it.stop(); "stopped" }
         if (Shizuku.pingBinder()) Shizuku.unbindUserService(EngineArgs.args, connection, true)
         engine = null
+        binding = false
         setStatus("stopped")
     }
 
@@ -418,7 +427,7 @@ class MainActivity : Activity() {
         carTextView.text = when (mode) {
             Prefs.CarText.LOCK_SCREEN -> "Default: like your lock screen, shown when it shows it (Settings > Notifications > sensitive notifications)."
             Prefs.CarText.ALWAYS -> "Always shown in the car, even when your lock screen hides it. Passengers can read it."
-            Prefs.CarText.NEVER -> "Never shown in the car: only the app and the sender."
+            Prefs.CarText.NEVER -> "Never shown in the car: only the app and the title (usually the sender; some apps put more there)."
         }
     }
 

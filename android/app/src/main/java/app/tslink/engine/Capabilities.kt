@@ -32,6 +32,7 @@ object Capabilities {
             if (Build.VERSION.SDK_INT >= 31) method(wm, "setDisplayImePolicy", int, int) else method(wm, "setShouldShowIme", int, bool)
         },
         Probe("isKeyguardLocked", "phone screen handling (lock state)") { method(aidl("window", "android.view.IWindowManager"), "isKeyguardLocked") },
+        Probe("isKeyguardSecure", "phone screen handling (keep an unlocked phone on)") { method(aidl("window", "android.view.IWindowManager"), "isKeyguardSecure", int) },
         Probe("lockNow", "phone screen handling (lock before going dark)") { method(aidl("window", "android.view.IWindowManager"), "lockNow", android.os.Bundle::class.java) },
         Probe("PowerManager.wakeUp", "phone screen handling (wake)") { method(PowerManager::class.java, "wakeUp", long, int, String::class.java) },
         Probe("PowerManager.goToSleep", "phone screen handling (sleep after the drive)") { method(PowerManager::class.java, "goToSleep", long) },

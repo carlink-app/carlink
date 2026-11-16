@@ -66,7 +66,9 @@ class PhonePower(private val handler: Handler) {
             if (interactive && dark) ticks++
             val litFor = if (interactive && !dark) SystemClock.uptimeMillis() - litSince else 0L
             // Unlocked and lit (on the charging pad): just keep it on, no tricks.
-            val unlocked = interactive && !dark && keyguardLocked() == false
+            // Only a phone with a lock (PIN, pattern...) counts: without one it's never
+            // "locked", and would stay lit all drive after a power button press.
+            val unlocked = interactive && !dark && keyguardSecure() && keyguardLocked() == false
             if (unlocked != keptOn) keepOn(unlocked)
             when (pollStep(interactive, dark, ticks, litFor, screenTimeoutMs(), unlocked)) {
                 Step.LIGHTEN -> lighten()
@@ -111,11 +113,12 @@ class PhonePower(private val handler: Handler) {
     private fun keepOn(on: Boolean) {
         keptOn = on
         if (on) lock.acquire() else if (!dark) lock.release()
+        // Locked again: the screen timeout counts from now, not from when it was unlocked.
+        if (!on && !dark) litSince = SystemClock.uptimeMillis()
         Log.i(TAG, if (on) "phone unlocked: keeping it on while the car is connected" else "phone locked again: normal screen timeout")
     }
 
     private fun darken() {
-        if (keptOn) keptOn = false // the dark state holds the lock from here
         lockNow()
         if (!wake()) {
             // Without waking, dark/lit would flap every poll and the car stays dozing.
@@ -156,6 +159,19 @@ class PhonePower(private val handler: Handler) {
     }.coerceAtLeast(MIN_LIT_MS)
 
     /** Through the window service: KeyguardManager doesn't work in the shell process. */
+    /** The phone has a secure lock screen (cached: it doesn't change mid-drive). Unknown: false. */
+    private val keyguardSecure: () -> Boolean = run {
+        var cached: Boolean? = null
+        {
+            cached ?: (try {
+                val wm = Shell.service("window", "android.view.IWindowManager")!!
+                wm.javaClass.getMethod("isKeyguardSecure", Int::class.javaPrimitiveType).invoke(wm, 0) as Boolean
+            } catch (e: Exception) {
+                false
+            }).also { cached = it }
+        }
+    }
+
     private fun keyguardLocked(): Boolean? = try {
         val wm = Shell.service("window", "android.view.IWindowManager")!!
         wm.javaClass.getMethod("isKeyguardLocked").invoke(wm) as Boolean

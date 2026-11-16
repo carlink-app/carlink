@@ -90,10 +90,13 @@ class EngineService : IEngine.Stub() {
 
     override fun pairingResult(): String = if (fromTSLink()) pairing else ""
 
+    // Synchronized: one at a time (a double tap), and not alongside start/stop.
+    @Synchronized
     override fun selfTest(): String {
         if (!fromTSLink()) return "denied"
-        // Encoders are a limited resource: don't take them from a car session.
-        if (engine?.status?.startsWith("car connected") == true) return "error: disconnect the car first"
+        // Encoders are a limited resource: not while a car's panes hold them
+        // (connected, or within the grace period after a disconnect).
+        if (engine?.hasPanes == true) return "error: the car is using the phone's encoder; disconnect it first (or wait a minute)"
         if (android.os.Process.myUid() == 0) return ROOT_ERROR
         return try {
             Shell.init()
