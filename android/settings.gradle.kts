@@ -12,5 +12,5 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
-rootProject.name = "carlink"
+rootProject.name = "tslink"
 include(":app")

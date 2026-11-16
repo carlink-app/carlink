@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 struct Log;
-impl carlink_core::server::Listener for Log {
+impl tslink_core::server::Listener for Log {
     fn on_session(&self, connected: bool, remote: &str) {
         println!("session {} {remote}", if connected { "up" } else { "down" });
     }
@@ -34,9 +34,9 @@ fn main() -> anyhow::Result<()> {
     let mut args = std::env::args().skip(1);
     let code = args.next().unwrap_or_else(|| "TEST-CODE-0001".into());
     let port: u16 = args.next().map(|p| p.parse()).transpose()?.unwrap_or(4433);
-    println!("cert {}", carlink_core::cert::make(&code, carlink_core::cert::now_unix()).hash_hex());
-    let opts = carlink_core::server::Options { port, code, allow: String::new() };
-    let _server = carlink_core::server::Server::start(opts, Arc::new(Log))?;
+    println!("cert {}", tslink_core::cert::make(&code, tslink_core::cert::now_unix()).hash_hex());
+    let opts = tslink_core::server::Options { port, code, allow: String::new() };
+    let _server = tslink_core::server::Server::start(opts, Arc::new(Log))?;
     std::thread::park();
     Ok(())
 }

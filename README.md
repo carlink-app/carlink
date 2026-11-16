@@ -1,4 +1,4 @@
-# carlink
+# TSLink
 
 Use your Android phone's apps on the Tesla screen: Waze, Google Maps, ABRP,
 messages, with touch, notifications and an app launcher, like Android Auto
@@ -11,14 +11,14 @@ simulated Wi-Fi. Any Android 11+ phone and a Tesla with the Chromium browser
 should work.
 
 - **Get the app:** build it from source (below); there are no APK downloads.
-- **Car page:** https://carlink-app.github.io/carlink/
+- **Car page:** https://tslink.app/
 - **Setup and first-test checklist:** [docs/CAR-TEST.md](docs/CAR-TEST.md)
 
 ## How it works
 
 ```
 Phone (Android)                                         Tesla browser
-  carlink app ── Shizuku ──> engine (shell rights)
+  TSLink app ── Shizuku ──> engine (shell rights)
                                virtual display  ──┐
                                H.264/HEVC encoder  ├──>  WebTransport (QUIC)  ──>  car page
                                touch injection  <─┘     over the phone hotspot      WebCodecs decode, touch
@@ -34,7 +34,7 @@ Phone (Android)                                         Tesla browser
   random loss, drop-to-keyframe on backlog. The car authenticates with a
   pairing code (HMAC challenge-response); the TLS certificate is derived from
   the code, so no server or internet is needed.
-- **Hotspot**: the Tesla browser refuses private IPs, so carlink restarts the
+- **Hotspot**: the Tesla browser refuses private IPs, so TSLink restarts the
   phone's hotspot on a fixed public-looking subnet: phone 9.9.0.1, car 9.9.0.2.
 - **Car page** (TypeScript, `web/`): hosted on GitHub Pages, cached offline by
   a service worker. Decodes in a worker, draws the newest frame, sends touch,
@@ -48,11 +48,11 @@ Protocol and certificate details: [docs/PROTOCOL.md](docs/PROTOCOL.md).
 ## Setup (short)
 
 1. Install **Shizuku** from Play and start it (Wireless debugging, on Wi-Fi).
-2. Build carlink and install it over USB (see Build from source). Google Play
+2. Build TSLink and install it over USB (see Build from source). Google Play
    Protect blocks installing it from a file manager or browser (it uses
    notification access), so install with `adb`.
-3. In carlink: **Start engine**, allow Shizuku, note the pairing code, tap **Car hotspot on**.
-4. In the car: join the phone's hotspot, open https://carlink-app.github.io/carlink/,
+3. In TSLink: **Start engine**, allow Shizuku, note the pairing code, tap **Car hotspot on**.
+4. In the car: join the phone's hotspot, open https://tslink.app/,
    enter the code, connect.
 
 The full checklist with hotspot settings and troubleshooting is in
@@ -109,11 +109,11 @@ no APK in releases: build the app yourself.
 - The on-screen keyboard appears on the car screen, also while the phone is
   locked; its suggestions and clipboard chip can show there. Apps can't open
   Settings, Play Store, installers or the keyboard's settings in the car:
-  carlink closes them.
+  TSLink closes them.
 - Camera apps aren't offered in the car and are closed if another app opens
   them there (apps with a built-in camera, like messengers, still have it).
 - On phones where the car screen shares the phone's power state (seen on a
-  Pixel with Android 17), carlink keeps the phone awake and locked with its own
+  Pixel with Android 17), TSLink keeps the phone awake and locked with its own
   screen switched off while the car is connected. Press power to use the
   phone; it goes dark again after the screen timeout.
 - Don't operate the screen while driving beyond what you would do with the
@@ -129,6 +129,6 @@ no APK in releases: build the app yourself.
 ## License
 
 [PolyForm Noncommercial 1.0.0](LICENSE.md): you may use, build and modify
-carlink for personal and other noncommercial purposes; commercial use is not
+TSLink for personal and other noncommercial purposes; commercial use is not
 allowed. Parts adapted from [scrcpy](https://github.com/Genymobile/scrcpy)
 stay under the Apache License 2.0; see [NOTICE](NOTICE).

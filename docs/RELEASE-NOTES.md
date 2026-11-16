@@ -1,4 +1,4 @@
-carlink streams apps from your Android phone to the Tesla browser over the
+TSLink streams apps from your Android phone to the Tesla browser over the
 phone's hotspot, with touch, notifications and an app launcher. Sound stays on
 the car's Bluetooth.
 
@@ -9,30 +9,30 @@ the car's Bluetooth.
 
 | File | What it is |
 |---|---|
-| `carlink-car-page-<version>.zip` | The car page, only if you want to host it yourself |
+| `tslink-car-page-<version>.zip` | The car page, only if you want to host it yourself |
 | `SHA256SUMS.txt` | Checksums |
 
 There is no APK: build the phone app from source and install it over USB
 (see the README, "Build from source"). The car page is served at
-**https://carlink-app.github.io/carlink/**.
+**https://tslink.app/**.
 
 ## Setup
 
-1. **Shizuku** (gives carlink the rights it needs, no root):
+1. **Shizuku** (gives TSLink the rights it needs, no root):
    [Google Play](https://play.google.com/store/apps/details?id=moe.shizuku.privileged.api).
    Start it via Wireless debugging or over USB (Shizuku shows how).
-2. **Build and install carlink** over USB with `adb install` (Play Protect
+2. **Build and install TSLink** over USB with `adb install` (Play Protect
    blocks installing it from a browser or file manager).
-3. **Open carlink**, tap Start engine, allow Shizuku and notifications, note
+3. **Open TSLink**, tap Start engine, allow Shizuku and notifications, note
    the pairing code. Optional: car notifications, Bluetooth auto-start.
 4. **Hotspot:** WPA2-Personal, "Turn off hotspot automatically" off. In
-   carlink, Car hotspot on.
+   TSLink, Car hotspot on.
 5. **In the car:** join the phone's hotspot, open
-   https://carlink-app.github.io/carlink/, enter the pairing code (address
+   https://tslink.app/, enter the pairing code (address
    9.9.0.1, port 4433 are filled in), Save & connect.
 
 Checklist and troubleshooting:
-[docs/CAR-TEST.md](https://github.com/carlink-app/carlink/blob/main/docs/CAR-TEST.md).
+[docs/CAR-TEST.md](https://github.com/tslink-app/tslink/blob/main/docs/CAR-TEST.md).
 
 ## Known limits
 

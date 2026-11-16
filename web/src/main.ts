@@ -156,7 +156,7 @@ function detectCodecs(): Promise<Codec[]> {
  * they're taken off the address bar and history at once; a reload for an
  * update gets them back from sessionStorage (this tab only).
  */
-const OVERRIDE_KEY = 'carlink.override';
+const OVERRIDE_KEY = 'tslink.override';
 const overrides = location.hash || (sessionStorage.getItem(OVERRIDE_KEY) ?? '');
 sessionStorage.removeItem(OVERRIDE_KEY);
 let settings: Settings = effective(overrides);
@@ -174,7 +174,7 @@ const conn = new Connection({
   onStatus: showStatus,
   onMessage,
   onSession: () => {
-    performance.mark('carlink:session');
+    performance.mark('tslink:session');
     firstFrameMarked = false;
     rtt.clear();
     for (const p of panes) p.video = null;
@@ -467,7 +467,7 @@ worker.onmessage = (e: MessageEvent<FromWorker>) => {
   } else if (m.type === 'firstDraw') {
     if (!firstFrameMarked) {
       firstFrameMarked = true;
-      performance.mark('carlink:firstFrame');
+      performance.mark('tslink:firstFrame');
       requestIcons(); // video is running: now the icons may use the link
     }
   } else if (m.type === 'log') {
@@ -526,7 +526,7 @@ async function onApps(list: AppInfo[]) {
   const valid = list.filter((a) => a && typeof a.pkg === 'string');
   missingIcons = applyCache(valid, iconCache).filter((p) => p.length <= MAX_PKG_CHARS && PKG_RE.test(p)).slice(0, MAX_CACHED);
   setApps(valid);
-  performance.measure('carlink:apps', { start: t0, end: performance.now(), detail: { count: apps.length, missingIcons: missingIcons.length } });
+  performance.measure('tslink:apps', { start: t0, end: performance.now(), detail: { count: apps.length, missingIcons: missingIcons.length } });
   void saveIcons(new Map(), new Set(valid.map((a) => a.pkg))); // forget uninstalled apps
   // Asked for at the first frame; if video is already running, now; the timer
   // covers a session without video.
@@ -563,7 +563,7 @@ let recents: AppInfo[] = loadRecents();
 
 function loadRecents(): AppInfo[] {
   try {
-    const r = JSON.parse(localStorage.getItem('carlink.recents') || '[]');
+    const r = JSON.parse(localStorage.getItem('tslink.recents') || '[]');
     return Array.isArray(r) ? r.filter((a) => a && typeof a.pkg === 'string').slice(0, MAX_RECENTS) : [];
   } catch { return []; }
 }
@@ -635,7 +635,7 @@ function launch(a: AppInfo) {
 
 function setRecents(list: AppInfo[]) {
   recents = list.slice(0, MAX_RECENTS);
-  try { localStorage.setItem('carlink.recents', JSON.stringify(recents)); } catch { /* quota: icons too big */ }
+  try { localStorage.setItem('tslink.recents', JSON.stringify(recents)); } catch { /* quota: icons too big */ }
   disarm();
   renderRecents();
 }

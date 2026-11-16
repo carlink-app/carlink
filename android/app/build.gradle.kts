@@ -3,11 +3,11 @@ plugins {
 }
 
 android {
-    namespace = "app.carlink"
+    namespace = "app.tslink"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "app.carlink"
+        applicationId = "app.tslink"
         minSdk = 30
         targetSdk = 36
         // Shizuku replaces a running engine daemon only when its version changes:

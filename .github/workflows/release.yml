@@ -29,7 +29,7 @@ jobs:
       - name: Zip the car page
         run: |
           mkdir -p ../out
-          (cd dist && zip -qr "../../out/carlink-car-page-${GITHUB_REF_NAME}.zip" .)
+          (cd dist && zip -qr "../../out/tslink-car-page-${GITHUB_REF_NAME}.zip" .)
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: web
@@ -55,6 +55,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "$GITHUB_REF_NAME" out/* \
-            --title "carlink $GITHUB_REF_NAME" \
+            --title "tslink $GITHUB_REF_NAME" \
             --notes-file docs/RELEASE-NOTES.md \
             --prerelease

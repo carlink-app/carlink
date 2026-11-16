@@ -1,6 +1,6 @@
 # Security
 
-carlink runs with shell rights on the phone (through Shizuku) and shows the
+TSLink runs with shell rights on the phone (through Shizuku) and shows the
 phone's apps in a car, so security reports are welcome.
 
 **Report privately:** GitHub, *Security* tab > *Report a vulnerability*

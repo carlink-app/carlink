@@ -14,4 +14,4 @@ labels: bug
 
 **Debug info** (very helpful):
 - A photo of the car page's debug overlay: open the page with `?debug=1`, or tap the clock.
-- The engine log: carlink app > Engine log > Share. Check it for anything private before posting.
+- The engine log: TSLink app > Engine log > Share. Check it for anything private before posting.

@@ -2,7 +2,7 @@
 // phone's icon hash: a session only fetches icons that are new or changed,
 // instead of ~1 MB of icons at every connect.
 
-const DB = 'carlink';
+const DB = 'tslink';
 const STORE = 'icons';
 
 export interface CachedIcon { h: string; icon: string }

@@ -1,4 +1,8 @@
-# carlink wire protocol v2
+# TSLink wire protocol v2
+
+The app was called carlink before; the protocol keeps that name in its
+internal identifiers (session path `/carlink`, the `carlink-auth-*` and
+`carlink-wt-key-v1` labels, the certificate name), so they are unchanged.
 
 Phone (engine) <-> car page (Tesla browser) over WebTransport (HTTP/3, QUIC).
 
@@ -148,7 +152,7 @@ Phone -> page:
   same `id` replaces the earlier one). `kind`: `msg` | `call` | `nav` |
   `other`. Limits: `id` up to 64 chars of `[A-Za-z0-9_-]`, `title` up to 120,
   `text` up to 300 (either may be empty), `icon` (optional) up to 16 KB.
-  Ongoing, silent, media and carlink's own notifications are not sent.
+  Ongoing, silent, media and TSLink's own notifications are not sent.
   `notif-gone`: dismissed or cancelled on the phone. After the phone's
   `hello` it re-sends active calls and notifications from the last 5
   minutes (up to 10); the page clears

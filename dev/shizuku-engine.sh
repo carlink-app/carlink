@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Start the engine the production way (carlink app -> Shizuku user service) on
+# Start the engine the production way (tslink app -> Shizuku user service) on
 # a connected device/emulator: opens the app, taps "Start engine", waits until
 # the WebTransport server listens. Shizuku must be running and allowed.
 # Emulator: `adb emu redir add udp:24433:4433` and the dev_allow switch
-# (adb shell "run-as app.carlink sh -c 'echo 10.0.2.2 > files/dev_allow'").
+# (adb shell "run-as app.tslink sh -c 'echo 10.0.2.2 > files/dev_allow'").
 set -euo pipefail
 adb logcat -c
-adb shell am start -n app.carlink/.ui.MainActivity >/dev/null
+adb shell am start -n app.tslink/.ui.MainActivity >/dev/null
 for _ in $(seq 20); do
   adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1 || true
   b=$(adb shell cat /sdcard/ui.xml | grep -oE 'text="Start engine"[^>]*bounds="\[[0-9]+,[0-9]+\]\[[0-9]+,[0-9]+\]"' | grep -oE '[0-9]+' | tr '\n' ' ' || true)

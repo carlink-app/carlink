@@ -339,7 +339,7 @@ impl Server {
         let allow = Arc::new(parse_allow(&opts.allow)?);
         let rt = tokio::runtime::Builder::new_multi_thread()
             .worker_threads(2)
-            .thread_name("carlink-net")
+            .thread_name("tslink-net")
             .enable_all()
             .build()?;
         let shared = Arc::new(Mutex::new(Shared {

@@ -72,4 +72,4 @@ The **licensor** is the individual or entity offering these terms, and the **sof
 
 **Use** means anything you do with the software requiring one of your licenses.
 
-Required Notice: Copyright (c) 2026 the carlink authors (https://github.com/carlink-app/carlink)
+Required Notice: Copyright (c) 2026 the TSLink authors (https://github.com/tslink-app/tslink)

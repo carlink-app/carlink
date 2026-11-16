@@ -1,5 +1,5 @@
-carlink
-Copyright (c) 2026 the carlink authors
+TSLink
+Copyright (c) 2026 the TSLink authors
 Licensed under the PolyForm Noncommercial License 1.0.0 (LICENSE.md).
 
 This project contains code adapted from scrcpy
@@ -8,10 +8,10 @@ Copyright (C) 2018-2026 Romain Vimont, licensed under the Apache License,
 Version 2.0 (https://www.apache.org/licenses/LICENSE-2.0). The adapted parts
 are marked in these files:
 
-  android/app/src/main/java/app/carlink/engine/Shell.kt
-  android/app/src/main/java/app/carlink/engine/Pane.kt
-  android/app/src/main/java/app/carlink/engine/Input.kt
-  android/app/src/main/java/app/carlink/engine/PhonePower.kt
+  android/app/src/main/java/app/tslink/engine/Shell.kt
+  android/app/src/main/java/app/tslink/engine/Pane.kt
+  android/app/src/main/java/app/tslink/engine/Input.kt
+  android/app/src/main/java/app/tslink/engine/PhonePower.kt
 
 Those adaptations remain available under the Apache License 2.0 as well.
 Third-party dependencies keep their own licenses (see core/Cargo.toml,

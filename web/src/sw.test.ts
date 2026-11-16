@@ -7,7 +7,7 @@ import config from '../vite.config';
 type Handler = (e: any) => void;
 
 function generate(files: string[]): string {
-  const plugin = (config.plugins as any[]).find((p) => p?.name === 'carlink-sw');
+  const plugin = (config.plugins as any[]).find((p) => p?.name === 'tslink-sw');
   let src = '';
   const bundle = Object.fromEntries(files.map((f) => [f, {}]));
   plugin.generateBundle.call({ emitFile: (f: { fileName: string; source: string }) => { if (f.fileName === 'sw.js') src = f.source; } }, {}, bundle);
@@ -65,7 +65,7 @@ const cacheName = (src: string) => /const CACHE = '([^']+)'/.exec(src)![1];
 describe('generated service worker', () => {
   it('versions the cache by the bundle file list', () => {
     const a = generate(FILES);
-    expect(cacheName(a)).toMatch(/^carlink-[0-9a-f]{8}$/);
+    expect(cacheName(a)).toMatch(/^tslink-[0-9a-f]{8}$/);
     expect(cacheName(generate(FILES))).toBe(cacheName(a));
     expect(cacheName(generate(['index.html', 'assets/main-xyz.js']))).not.toBe(cacheName(a));
   });
@@ -87,11 +87,11 @@ describe('generated service worker', () => {
     expect(sw.calls.skipWaiting).toBe(1);
   });
 
-  it('on activate deletes old carlink caches only, then claims clients', async () => {
+  it('on activate deletes old tslink caches only, then claims clients', async () => {
     const src = generate(FILES);
-    const sw = load(src, ['carlink-00000000', 'other-app', cacheName(src)]);
+    const sw = load(src, ['tslink-00000000', 'other-app', cacheName(src)]);
     await sw.dispatch('activate');
-    expect(sw.deleted).toEqual(['carlink-00000000']);
+    expect(sw.deleted).toEqual(['tslink-00000000']);
     expect(sw.calls.claim).toBe(1);
   });
 
@@ -118,7 +118,7 @@ describe('generated service worker', () => {
     const sw = load(generate(FILES));
     for (const request of [
       { method: 'POST', url: `${SCOPE}x`, mode: 'cors' },
-      { method: 'GET', url: 'https://9.9.0.1:4433/carlink', mode: 'cors' },
+      { method: 'GET', url: 'https://9.9.0.1:4433/tslink', mode: 'cors' },
     ]) {
       // A handler that doesn't call respondWith lets the browser handle it.
       expect(await sw.dispatch('fetch', { request })).toBe(NONE);

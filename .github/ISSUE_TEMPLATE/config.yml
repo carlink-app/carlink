@@ -1,5 +1,5 @@
 blank_issues_enabled: true
 contact_links:
   - name: Security problem
-    url: https://github.com/carlink-app/carlink/security/advisories/new
+    url: https://github.com/tslink-app/tslink/security/advisories/new
     about: Please report security issues privately.

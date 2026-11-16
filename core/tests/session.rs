@@ -2,7 +2,7 @@
 
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as B64;
-use carlink_core::{cert, server};
+use tslink_core::{cert, server};
 use sha2::{Digest, Sha256};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -101,7 +101,7 @@ fn authenticated_session_end_to_end() {
         tokio::time::sleep(Duration::from_millis(100)).await;
         assert!(events.has("session true"));
         // Each session starts the encoder at START_LEVEL, after it's announced.
-        let start = format!("rate {}", carlink_core::rate::START_LEVEL);
+        let start = format!("rate {}", tslink_core::rate::START_LEVEL);
         assert_eq!(events.count(&start), 1);
         assert!(events.position("session true") < events.position(&start));
 

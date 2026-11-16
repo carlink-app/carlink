@@ -32,7 +32,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const adb = (...a) => { try { return execFileSync('adb', a, { encoding: 'utf8', timeout: 15000 }); } catch { return ''; } };
 // The engine isn't an app process to dumpsys (Shizuku spawns it): look it up by pid.
 const enginePssKb = () => {
-  const pid = adb('shell', 'pidof', 'app.carlink:engine').trim().split(/\s+/)[0];
+  const pid = adb('shell', 'pidof', 'app.tslink:engine').trim().split(/\s+/)[0];
   const m = pid ? adb('shell', 'dumpsys', 'meminfo', pid).match(/TOTAL PSS:\s+(\d+)/) : null;
   return m ? Number(m[1]) : null;
 };
@@ -136,11 +136,11 @@ while (Date.now() < end) {
   if (args.idle) await sleep(500);
   else await drag(x + w * (flip ? 0.7 : 0.3), y + h * 0.5, x + w * (flip ? 0.3 : 0.7), y + h * (flip ? 0.4 : 0.6));
   if (smsAt && Date.now() >= smsAt) {
-    adb('emu', 'sms', 'send', '5550199', `carlink e2e ${label}`);
+    adb('emu', 'sms', 'send', '5550199', `tslink e2e ${label}`);
     smsAt = 0;
     const tSms = Date.now();
     while (Date.now() - tSms < 8000 && !smsSeen) {
-      if (await evaluate(`[...document.querySelectorAll('.notif')].some(n => n.textContent.includes('carlink e2e'))`)) smsSeen = Date.now() - tSms;
+      if (await evaluate(`[...document.querySelectorAll('.notif')].some(n => n.textContent.includes('tslink e2e'))`)) smsSeen = Date.now() - tSms;
       else await sleep(200);
     }
   }

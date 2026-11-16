@@ -12,14 +12,14 @@ export ANDROID_NDK_HOME=${ANDROID_NDK_HOME:-$(ls -d ~/Android/Sdk/ndk/* | sort -
 (cd core && cargo ndk -t x86_64 -t arm64-v8a --platform 30 -o ../android/app/src/main/jniLibs build --release --locked -q)
 (cd android && ./gradlew assembleDebug -q)
 adb install -r -g android/app/build/outputs/apk/debug/app-debug.apk >/dev/null
-APK=$(adb shell pm path app.carlink | tr -d '\r' | sed 's/^package://')
-LIB=$(adb shell dumpsys package app.carlink | tr -d '\r' | sed -n 's/^ *legacyNativeLibraryDir=//p' | head -1)
+APK=$(adb shell pm path app.tslink | tr -d '\r' | sed 's/^package://')
+LIB=$(adb shell dumpsys package app.tslink | tr -d '\r' | sed -n 's/^ *legacyNativeLibraryDir=//p' | head -1)
 ABI=$(adb shell getprop ro.product.cpu.abi | tr -d '\r')
 case $ABI in x86_64) LIBDIR=$LIB/x86_64 ;; arm64-v8a) LIBDIR=$LIB/arm64 ;; *) LIBDIR=$LIB/$ABI ;; esac
-adb shell "pkill -f app.carlink.engine.EngineMai[n]" || true
+adb shell "pkill -f app.tslink.engine.EngineMai[n]" || true
 if adb get-serialno | grep -q emulator; then
   adb emu redir del udp:24433 >/dev/null 2>&1 || true
   adb emu redir add udp:24433:4433 >/dev/null
 fi
-echo "engine: code=$CODE apk=$APK lib=$LIBDIR/libcarlink_core.so"
-exec adb shell CLASSPATH="$APK" app_process / app.carlink.engine.EngineMain --code "$CODE" --port 4433 --allow any --lib "$LIBDIR/libcarlink_core.so"
+echo "engine: code=$CODE apk=$APK lib=$LIBDIR/libtslink_core.so"
+exec adb shell CLASSPATH="$APK" app_process / app.tslink.engine.EngineMain --code "$CODE" --port 4433 --allow any --lib "$LIBDIR/libtslink_core.so"

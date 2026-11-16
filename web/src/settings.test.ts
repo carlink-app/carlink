@@ -49,13 +49,13 @@ describe('saved settings and fragment overrides', () => {
     expect(loadSaved()).toEqual({ code: 'ABCD-EFGH-JKLM', host: '10.0.0.2', port: 5000, showText: false });
   });
   it('falls back per field on corrupt or wrongly typed storage', () => {
-    localStorage.setItem('carlink.settings', '{not json');
+    localStorage.setItem('tslink.settings', '{not json');
     expect(loadSaved()).toEqual(defaults);
-    localStorage.setItem('carlink.settings', JSON.stringify({ code: 7, host: '', port: 99999 }));
+    localStorage.setItem('tslink.settings', JSON.stringify({ code: 7, host: '', port: 99999 }));
     expect(loadSaved()).toEqual(defaults);
-    localStorage.setItem('carlink.settings', JSON.stringify({ code: 'X', host: 'h', port: '4434' }));
+    localStorage.setItem('tslink.settings', JSON.stringify({ code: 'X', host: 'h', port: '4434' }));
     expect(loadSaved()).toEqual({ code: 'X', host: 'h', port: 4434, ...d });
-    localStorage.setItem('carlink.settings', JSON.stringify({ code: 'X', showText: 'no' }));
+    localStorage.setItem('tslink.settings', JSON.stringify({ code: 'X', showText: 'no' }));
     expect(loadSaved()).toEqual({ ...defaults, code: 'X' });
   });
   it('fragment overrides win but are not saved', () => {
@@ -71,7 +71,7 @@ describe('saved settings and fragment overrides', () => {
     expect(effective('#code=')).toEqual({ ...saved, code: '' });
   });
   it('keeps settings saved before display settings existed (milestone 2 format)', () => {
-    localStorage.setItem('carlink.settings', JSON.stringify({ code: 'OLD', host: '10.0.0.3', port: 4433 }));
+    localStorage.setItem('tslink.settings', JSON.stringify({ code: 'OLD', host: '10.0.0.3', port: 4433 }));
     expect(loadSaved()).toEqual({ code: 'OLD', host: '10.0.0.3', port: 4433, showText: true });
   });
   it('saves display settings without touching the pairing or persisting overrides', () => {
@@ -82,7 +82,7 @@ describe('saved settings and fragment overrides', () => {
   });
   it('save persists only known fields', () => {
     save({ ...saved, extra: 'x' } as Settings);
-    expect(JSON.parse(localStorage.getItem('carlink.settings')!)).toEqual(saved);
+    expect(JSON.parse(localStorage.getItem('tslink.settings')!)).toEqual(saved);
   });
   it('display changes are not an endpoint change', () => {
     expect(sameEndpoint(saved, { ...saved, showText: false })).toBe(true);

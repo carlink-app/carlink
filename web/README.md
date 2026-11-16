@@ -1,4 +1,4 @@
-# carlink web (car side)
+# TSLink web (car side)
 
 The page that runs in the Tesla browser: Android Auto–style rail + one pane
 showing the phone's apps, streamed over WebTransport (see

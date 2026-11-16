@@ -3,7 +3,7 @@
 // against the real engine. Prints session -> first frame, app list size and
 // handling time, main-thread long tasks, and fps per second.
 //
-// Usage: CARLINK_CODE=XXXX-XXXX-XXXX node dev/perf-startup.mjs --host 192.168.x.y
+// Usage: TSLINK_CODE=XXXX-XXXX-XXXX node dev/perf-startup.mjs --host 192.168.x.y
 //          [--page http://127.0.0.1:4173/] [--seconds 12] [--cpu 4] [--app Waze]
 // The pairing code is a secret: it comes from the environment, not the command
 // line (visible to other local users), and the temporary browser profile is
@@ -18,10 +18,10 @@ import { join } from 'node:path';
 
 const args = Object.fromEntries(process.argv.slice(2).reduce((a, x, i, all) => (x.startsWith('--') ? [...a, [x.slice(2), all[i + 1]]] : a), []));
 const { host } = args;
-const code = process.env.CARLINK_CODE;
+const code = process.env.TSLINK_CODE;
 const page = args.page ?? 'http://127.0.0.1:4173/';
 const seconds = Number(args.seconds ?? 12);
-if (!code || !host) { console.error('CARLINK_CODE and --host required'); process.exit(2); }
+if (!code || !host) { console.error('TSLINK_CODE and --host required'); process.exit(2); }
 const W = 773, H = 601, DPR = 1.53;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -86,12 +86,12 @@ while (Date.now() - t0 < seconds * 1000) {
 }
 const r = await ev(`(() => {
   const at = (n) => performance.getEntriesByName(n)[0];
-  const s = at('carlink:session')?.startTime ?? 0;
-  const apps = at('carlink:apps');
+  const s = at('tslink:session')?.startTime ?? 0;
+  const apps = at('tslink:apps');
   const rel = (x) => x == null ? null : Math.round(x - s);
   return {
     sessionAtMs: Math.round(s),
-    firstFrameAfterSessionMs: rel(at('carlink:firstFrame')?.startTime),
+    firstFrameAfterSessionMs: rel(at('tslink:firstFrame')?.startTime),
     apps: apps && { afterSessionMs: rel(apps.startTime), handleMs: Math.round(apps.duration), count: apps.detail?.count, missingIcons: apps.detail?.missingIcons,
       iconsKB: Math.round([...document.querySelectorAll('#grid img')].reduce((n, i) => n + i.src.length, 0) / 1024) },
     longTasks: window.__long.map(([st, d]) => [Math.round(st - s), d]).filter(([st]) => st > -500),

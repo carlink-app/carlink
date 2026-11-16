@@ -49,7 +49,7 @@ export function capPane(w: number, h: number, dpi: number): { w: number; h: numb
   return { w: even(w * s), h: even(h * s), dpi: Math.max(DPI_MIN, Math.round(dpi * s)) };
 }
 
-const KEY = 'carlink.settings';
+const KEY = 'tslink.settings';
 
 export function loadSaved(): Settings {
   let s: Partial<Settings> = {};

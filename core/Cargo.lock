@@ -140,24 +140,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc652a48c352aef3ea3aed32080501cf3ef6ed5da78602a020c991775b0aff04"
 
 [[package]]
-name = "carlink_core"
-version = "0.1.0"
-dependencies = [
- "android_logger",
- "anyhow",
- "base64 0.23.1",
- "hex",
- "jni",
- "log",
- "p256",
- "ring",
- "serde_json",
- "sha2",
- "tokio",
- "wtransport",
-]
-
-[[package]]
 name = "cc"
 version = "1.11.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1500,6 +1482,24 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "db97caf9d906fbde555dd62fa95ddba9eecfd14cb388e4f491a66d74cd5fb79a"
 dependencies = [
  "once_cell",
+]
+
+[[package]]
+name = "tslink_core"
+version = "0.1.0"
+dependencies = [
+ "android_logger",
+ "anyhow",
+ "base64 0.23.1",
+ "hex",
+ "jni",
+ "log",
+ "p256",
+ "ring",
+ "serde_json",
+ "sha2",
+ "tokio",
+ "wtransport",
 ]
 
 [[package]]

@@ -6,11 +6,11 @@ car's Bluetooth, as usual.
 
 ## Before the day (at home, with a laptop)
 
-1. **Car page online.** Push to github.com/carlink-app/carlink (public) and set Settings -> Pages ->
+1. **Car page online.** Push to github.com/tslink-app/tslink (public) and set Settings -> Pages ->
    Source: GitHub Actions. Do this a day early: the deploy runs `npm audit` and
    a new advisory could block it. Then check that
-   `https://carlink-app.github.io/carlink/?debug=1` loads on a desktop.
-2. **Install carlink** (debug build, both ABIs):
+   `https://tslink.app/?debug=1` loads on a desktop.
+2. **Install TSLink** (debug build, both ABIs):
    `cd core && cargo ndk -t arm64-v8a -t x86_64 --platform 30 -o ../android/app/src/main/jniLibs build --release --locked`,
    then `cd android && ./gradlew assembleDebug && adb install -r app/build/outputs/apk/debug/app-debug.apk`.
 3. **Hotspot settings:**
@@ -20,13 +20,13 @@ car's Bluetooth, as usual.
    - Make other devices (watch, laptop, tablet) forget this hotspot, because
      the car hotspot gives out exactly one address, 9.9.0.2
 4. **Shizuku:** install from Play, start it via Wireless debugging (Shizuku shows how).
-5. **carlink:**
+5. **TSLink:**
    - Start engine, then allow Shizuku. Status shows `running on :4433`, later
      `waiting for car · cert abc123`.
    - Write down the pairing code.
    - Turn car notifications on (optional; this also gives the car real app icons).
    - Choose car: only if you want Bluetooth auto-start (untested so far).
-   - Battery: Unrestricted (Settings -> Apps -> carlink -> Battery).
+   - Battery: Unrestricted (Settings -> Apps -> TSLink -> Battery).
 6. **Shizuku without Wi-Fi.** Tap "Car hotspot on" (status `ok`), then turn Wi-Fi
    off or walk out of range for 2 minutes. Shizuku must still say running, and
    "Start engine" must answer "already running". If Shizuku died, fix that first:
@@ -36,11 +36,11 @@ car's Bluetooth, as usual.
 
 ## In the car
 
-8. Phone plugged in. In carlink: Start engine, then "Car hotspot on" (status `ok`).
+8. Phone plugged in. In TSLink: Start engine, then "Car hotspot on" (status `ok`).
    Don't use the system hotspot toggle: that one uses a private subnet the car
    browser refuses.
 9. Tesla Wi-Fi: join the phone's hotspot (not home Wi-Fi). The car's IP should be 9.9.0.2.
-10. Tesla browser: `https://carlink-app.github.io/carlink/?debug=1`. Enter the code;
+10. Tesla browser: `https://tslink.app/?debug=1`. Enter the code;
     host 9.9.0.1 and port 4433 are filled in. Save & connect.
 11. Expect "Connected to Pixel 9 Pro" and the app grid. In the overlay, the
     `cert ... fp` should match the `cert` in the phone's status.
@@ -64,7 +64,7 @@ Stay awake (keeps the phone screen on while charging).
 Capture:
 - A photo of the car screen with the debug overlay (its `-- env` and `-- log`
   sections are there for this) and the time.
-- In carlink: the status line, then "Engine log", then Share.
+- In TSLink: the status line, then "Engine log", then Share.
 - Shizuku's state; Hotspot -> connected devices.
 - If needed: Developer options -> Take bug report.
 
@@ -72,7 +72,7 @@ What the car's message means:
 
 | Car shows | Likely cause |
 |---|---|
-| This browser has no WebTransport | The Tesla browser can't run carlink as is; note the user agent from the overlay |
+| This browser has no WebTransport | The Tesla browser can't run TSLink as is; note the user agent from the overlay |
 | Timed out (phone unreachable?) | Car on another Wi-Fi, hotspot not in car mode (9.9.0.x), or engine not running |
 | Opening handshake failed | Wrong code (compare the cert fingerprints), engine not running, or car IP not 9.9.0.x |
 | Connected but black, errors rising | HEVC trouble: the page switches to H.264 by itself; or reload with `?codec=h264` |
@@ -81,7 +81,7 @@ What the car's message means:
 ## Known limits
 
 - Tapping a notification opens its app on the car. Android 16 doesn't let
-  carlink jump to the exact conversation.
+  TSLink jump to the exact conversation.
 - Apps with secure screens (banking) show black.
 - Settings, Shizuku, Play Store, installers and file managers are not offered
   in the car: the car display works while the phone is locked.

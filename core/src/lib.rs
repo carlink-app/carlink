@@ -1,5 +1,5 @@
-//! carlink core: WebTransport server for the car page, called from the
-//! Android engine over JNI (class app.carlink.engine.NativeCore).
+//! tslink core: WebTransport server for the car page, called from the
+//! Android engine over JNI (class app.tslink.engine.NativeCore).
 
 pub mod cert;
 pub mod rate;
@@ -74,7 +74,7 @@ fn init_logging() {
     static ONCE: Once = Once::new();
     ONCE.call_once(|| {
         #[cfg(target_os = "android")]
-        android_logger::init_once(android_logger::Config::default().with_max_level(log::LevelFilter::Info).with_tag("carlink-core"));
+        android_logger::init_once(android_logger::Config::default().with_max_level(log::LevelFilter::Info).with_tag("tslink-core"));
     });
 }
 
@@ -89,7 +89,7 @@ fn get_string(env: &mut JNIEnv, s: &JString) -> Option<String> {
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_app_carlink_engine_NativeCore_nativeStart(
+pub extern "system" fn Java_app_tslink_engine_NativeCore_nativeStart(
     mut env: JNIEnv,
     _class: JClass,
     port: jint,
@@ -113,7 +113,7 @@ pub extern "system" fn Java_app_carlink_engine_NativeCore_nativeStart(
 
 /// Send one encoded access unit from a direct ByteBuffer (MediaCodec output).
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_app_carlink_engine_NativeCore_nativeSendFrame(
+pub extern "system" fn Java_app_tslink_engine_NativeCore_nativeSendFrame(
     env: JNIEnv,
     _class: JClass,
     handle: jlong,
@@ -139,7 +139,7 @@ pub extern "system" fn Java_app_carlink_engine_NativeCore_nativeSendFrame(
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_app_carlink_engine_NativeCore_nativeSendControl(mut env: JNIEnv, _class: JClass, handle: jlong, json: JString) {
+pub extern "system" fn Java_app_tslink_engine_NativeCore_nativeSendControl(mut env: JNIEnv, _class: JClass, handle: jlong, json: JString) {
     let Some(server) = handle_ref(handle) else { return };
     if let Some(s) = get_string(&mut env, &json) {
         server.send_control(&s);
@@ -147,7 +147,7 @@ pub extern "system" fn Java_app_carlink_engine_NativeCore_nativeSendControl(mut 
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_app_carlink_engine_NativeCore_nativeStop(_env: JNIEnv, _class: JClass, handle: jlong) {
+pub extern "system" fn Java_app_tslink_engine_NativeCore_nativeStop(_env: JNIEnv, _class: JClass, handle: jlong) {
     if handle != 0 {
         let server = unsafe { Box::from_raw(handle as *mut server::Server) };
         server.shutdown();
@@ -156,7 +156,7 @@ pub extern "system" fn Java_app_carlink_engine_NativeCore_nativeStop(_env: JNIEn
 
 /// Hex SHA-256 of this week's certificate for a pairing code (diagnostics).
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_app_carlink_engine_NativeCore_nativeCertHash<'a>(mut env: JNIEnv<'a>, _class: JClass, code: JString) -> JString<'a> {
+pub extern "system" fn Java_app_tslink_engine_NativeCore_nativeCertHash<'a>(mut env: JNIEnv<'a>, _class: JClass, code: JString) -> JString<'a> {
     let code = get_string(&mut env, &code).unwrap_or_default();
     env.new_string(cert::make(&code, cert::now_unix()).hash_hex()).unwrap_or_default()
 }
