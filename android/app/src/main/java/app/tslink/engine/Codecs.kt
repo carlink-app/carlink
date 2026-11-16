@@ -9,6 +9,7 @@ import android.util.Log
 
 object Codecs {
     private const val TAG = "tslink"
+    private const val TOP_LEVEL = 3
 
     fun mime(codec: String): String = if (codec == "hevc") MediaFormat.MIMETYPE_VIDEO_HEVC else MediaFormat.MIMETYPE_VIDEO_AVC
 
@@ -56,8 +57,9 @@ object Codecs {
 
     /**
      * Configure [encoder] for the car stream. Optional keys go from most to
-     * least desirable; encoders reject unknown ones with
-     * IllegalArgumentException, so retry with fewer.
+     * least desirable; encoders reject ones they don't support (with
+     * IllegalArgumentException, or a CodecException on some software and
+     * older encoders), so retry with fewer, down to the bare minimum.
      */
     fun configure(encoder: MediaCodec, mime: String, width: Int, height: Int, bitrate: Int) {
         fun format(level: Int) = MediaFormat.createVideoFormat(mime, width, height).apply {
@@ -67,26 +69,30 @@ object Codecs {
             // Long GOP; keyframes are requested when a client (re)connects or
             // the sender has to skip frames.
             setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 10)
-            // Static screen: resend the last frame every 100 ms so the car
-            // stays in sync without a constant 60 fps stream.
-            setLong(MediaFormat.KEY_REPEAT_PREVIOUS_FRAME_AFTER, 100_000L)
             if (level >= 1) {
+                // Static screen: resend the last frame every 100 ms so the car
+                // stays in sync without a constant 60 fps stream.
+                setLong(MediaFormat.KEY_REPEAT_PREVIOUS_FRAME_AFTER, 100_000L)
+            }
+            if (level >= 2) {
                 setInteger(MediaFormat.KEY_MAX_B_FRAMES, 0)
                 setInteger(MediaFormat.KEY_PREPEND_HEADER_TO_SYNC_FRAMES, 1)
             }
-            if (level >= 2) {
+            if (level >= 3) {
                 setInteger(MediaFormat.KEY_PRIORITY, 0) // realtime
                 setInteger(MediaFormat.KEY_LATENCY, 1)
                 // Keep the encoder clocked up between frames (lower encode latency).
                 setInteger(MediaFormat.KEY_OPERATING_RATE, Short.MAX_VALUE.toInt())
             }
         }
-        for (level in 2 downTo 0) {
+        for (level in TOP_LEVEL downTo 0) {
             try {
                 encoder.configure(format(level), null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
-                if (level < 2) Log.w(TAG, "encoder ${encoder.codecInfo.name} accepted format level $level of 2")
+                if (level < TOP_LEVEL) Log.w(TAG, "encoder ${encoder.codecInfo.name} accepted format level $level of $TOP_LEVEL")
                 return
-            } catch (e: IllegalArgumentException) {
+            } catch (e: Exception) {
+                if (e !is IllegalArgumentException && e !is MediaCodec.CodecException) throw e
+                Log.w(TAG, "encoder ${encoder.codecInfo.name} refused format level $level: $e")
                 if (level == 0) throw e
                 encoder.reset()
             }

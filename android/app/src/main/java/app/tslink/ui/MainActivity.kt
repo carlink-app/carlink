@@ -101,9 +101,7 @@ class MainActivity : Activity() {
         showCar()
         setStatus("checking engine...")
         // Show the engine's real state even when it was started elsewhere (auto-start).
-        if (Shizuku.pingBinder() && Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED) {
-            Shizuku.bindUserService(EngineArgs.args, connection)
-        } else {
+        if (!bindIfAllowed()) {
             showStopped()
             setStatus("Shizuku ${if (Shizuku.pingBinder()) "hasn't allowed tslink yet" else "isn't running"}.")
         }
@@ -115,7 +113,17 @@ class MainActivity : Activity() {
         super.onResume()
         showCar() // may have been chosen in setup
         showNotifications()
-        call { it.status() }
+        // Shizuku may have been allowed meanwhile (in Setup): link to the engine now.
+        if (engine == null) bindIfAllowed() else call { it.status() }
+    }
+
+    private fun toast(s: String) = android.widget.Toast.makeText(this, s, android.widget.Toast.LENGTH_LONG).show()
+
+    /** Bind the engine service if Shizuku runs and allows us; false if not. */
+    private fun bindIfAllowed(): Boolean {
+        if (!Shizuku.pingBinder() || Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) return false
+        Shizuku.bindUserService(EngineArgs.args, connection)
+        return true
     }
 
     override fun onDestroy() {
@@ -420,12 +428,12 @@ class MainActivity : Activity() {
     /** Recent engine log (logcat as shell), to read or share after a car test. */
     /** Encoders, encode speed and car display support, without a car (see SelfTest). */
     private fun deviceCheck() {
-        val e = engine ?: return showMessage("Allow Shizuku first (Setup & checks).")
-        showMessage("Device check: about 15 seconds...")
+        // The message line is up in the Engine card: say it where the button is.
+        val e = engine ?: return toast(if (bindIfAllowed()) "Connecting to the engine, tap again in a moment." else "Allow Shizuku first (Setup & checks).")
+        toast("Device check: about 15 seconds...")
         thread {
             val report = try { e.selfTest() } catch (t: Throwable) { "error: $t" }
             runOnUiThread {
-                showMessage(null)
                 textDialog("Device check", report, "TSLink device check")
             }
         }
