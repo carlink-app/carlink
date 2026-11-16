@@ -9,6 +9,8 @@
 
     <!-- Launcher apps' icons for the car launcher (package visibility). -->
     <queries>
+        <!-- Setup: is Shizuku installed, and open it. -->
+        <package android:name="moe.shizuku.privileged.api" />
         <intent>
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />
@@ -33,6 +35,11 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <activity
+            android:name=".ui.SetupActivity"
+            android:exported="false"
+            android:label="TSLink setup" />
 
         <receiver android:name=".notify.CarSessionNotice$Disconnect" android:exported="false" />
         <receiver android:name=".auto.CarReceiver" android:exported="true">

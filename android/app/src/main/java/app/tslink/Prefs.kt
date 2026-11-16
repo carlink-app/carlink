@@ -42,6 +42,14 @@ object Prefs {
     fun autoStarted(ctx: Context): Boolean = prefs(ctx).getBoolean("auto_started", false)
     fun setAutoStarted(ctx: Context, on: Boolean) = prefs(ctx).edit().putBoolean("auto_started", on).apply()
 
+    /** The setup wizard was shown once (it opens by itself on first launch only). */
+    fun setupSeen(ctx: Context): Boolean = prefs(ctx).getBoolean("setup_seen", false)
+    fun setSetupSeen(ctx: Context) = prefs(ctx).edit().putBoolean("setup_seen", true).apply()
+
+    /** Setup steps the user marked done (settings TSLink can't read), by name. */
+    fun setupTicked(ctx: Context): Set<String> = prefs(ctx).getStringSet("setup_ticked", null).orEmpty().toSet()
+    fun setSetupTicked(ctx: Context, names: Set<String>) = prefs(ctx).edit().putStringSet("setup_ticked", names).apply()
+
     /** Last time the car connected (ms), to cancel a pending stop after a short dropout. */
     fun lastCarConnect(ctx: Context): Long = prefs(ctx).getLong("car_connect_at", 0)
     fun setLastCarConnect(ctx: Context, at: Long) = prefs(ctx).edit().putLong("car_connect_at", at).apply()

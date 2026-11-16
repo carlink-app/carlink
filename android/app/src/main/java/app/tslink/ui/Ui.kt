@@ -9,10 +9,13 @@ import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.RippleDrawable
 import android.view.Gravity
 import android.view.View
+import android.view.Window
+import android.view.WindowInsets
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
 import android.widget.Button
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.Switch
 import android.widget.TextView
 
@@ -128,6 +131,22 @@ class Ui(private val ctx: Context) {
             b.background = ripple(if (on) rounded(Color.parseColor("#1f3a5f"), 22, ACCENT) else rounded(SURFACE, 22, OUTLINE), 22)
             b.setTextColor(if (on) ACCENT else TEXT)
         }
+    }
+
+    /** The screen: [content] scrolling, edge to edge (always on with targetSdk 36) but clear of the system bars. */
+    fun screen(window: Window, content: View): ScrollView {
+        val scroll = ScrollView(ctx).apply {
+            clipToPadding = false
+            addView(content, MATCH_PARENT, WRAP_CONTENT)
+        }
+        window.setDecorFitsSystemWindows(false)
+        val pad = dp(16)
+        scroll.setOnApplyWindowInsetsListener { v, insets ->
+            val bars = insets.getInsets(WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout())
+            v.setPadding(pad + bars.left, pad + bars.top, pad + bars.right, pad + bars.bottom)
+            insets
+        }
+        return scroll
     }
 
     /** Coloured status dot. */

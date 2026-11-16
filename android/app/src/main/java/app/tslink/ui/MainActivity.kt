@@ -5,7 +5,6 @@ import android.annotation.SuppressLint
 import android.app.Activity
 import android.app.AlertDialog
 import android.app.NotificationManager
-import android.bluetooth.BluetoothManager
 import android.content.ComponentName
 import android.content.Intent
 import android.content.ServiceConnection
@@ -19,7 +18,6 @@ import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
-import android.view.WindowInsets
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -102,10 +100,13 @@ class MainActivity : Activity() {
             showStopped()
             setStatus("Shizuku ${if (Shizuku.pingBinder()) "hasn't allowed tslink yet" else "isn't running"}.")
         }
+        // First launch: walk through setup (it marks itself seen).
+        if (savedInstanceState == null && !Prefs.setupSeen(this)) startActivity(Intent(this, SetupActivity::class.java))
     }
 
     override fun onResume() {
         super.onResume()
+        showCar() // may have been chosen in setup
         showNotifications()
         call { it.status() }
     }
@@ -129,19 +130,7 @@ class MainActivity : Activity() {
         notificationsCard(content)
         diagnosticsCard(content)
 
-        val scroll = ScrollView(this).apply {
-            clipToPadding = false
-            addView(content, MATCH_PARENT, WRAP_CONTENT)
-        }
-        // Edge to edge (always on with targetSdk 36): keep content clear of the system bars.
-        window.setDecorFitsSystemWindows(false)
-        val pad = ui.dp(16)
-        scroll.setOnApplyWindowInsetsListener { v, insets ->
-            val bars = insets.getInsets(WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout())
-            v.setPadding(pad + bars.left, pad + bars.top, pad + bars.right, pad + bars.bottom)
-            insets
-        }
-        return scroll
+        return ui.screen(window, content)
     }
 
     private fun statusCard(parent: LinearLayout) {
@@ -214,7 +203,8 @@ class MainActivity : Activity() {
 
     private fun diagnosticsCard(parent: LinearLayout) {
         val card = ui.card(parent, "Diagnostics")
-        card.addView(ui.button("Engine log", primary = false) { showLog() }, fullWidth(top = 4))
+        card.addView(ui.button("Setup & checks", primary = false) { startActivity(Intent(this, SetupActivity::class.java)) }, fullWidth(top = 4))
+        card.addView(ui.button("Engine log", primary = false) { showLog() }, fullWidth(top = 8))
         diagView = ui.line("TSLink ${BuildConfig.VERSION_NAME}", size = 12f)
         card.addView(diagView)
         Prefs.devAllow(this).takeIf { it.isNotEmpty() }?.let { dev ->
@@ -417,34 +407,12 @@ class MainActivity : Activity() {
         carButton.text = if (name != null) "Change car" else "Choose car"
     }
 
-    /** Pick the car among paired Bluetooth devices; its connection starts everything. */
-    @SuppressLint("MissingPermission") // checked just above the calls
-    private fun chooseCar() {
-        if (Build.VERSION.SDK_INT >= 31 && checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(arrayOf(Manifest.permission.BLUETOOTH_CONNECT), REQ_BLUETOOTH)
-            return
-        }
-        val adapter = getSystemService(BluetoothManager::class.java)?.adapter
-        val devices = adapter?.bondedDevices?.sortedBy { it.name ?: "" }.orEmpty()
-        if (devices.isEmpty()) {
-            showCar("No paired Bluetooth devices. Pair the phone with your car first.")
-            return
-        }
-        val labels = devices.map { it.name ?: it.address }.toTypedArray<CharSequence>() + "None (no auto-start)"
-        AlertDialog.Builder(this)
-            .setTitle("Which one is your car?")
-            .setItems(labels) { _, i ->
-                val d = devices.getOrNull(i)
-                Prefs.setCar(this, d?.address, d?.name)
-                showCar()
-            }
-            .show()
-    }
+    private fun chooseCar() = CarPicker.pick(this, REQ_BLUETOOTH) { note -> showCar(note) }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode != REQ_BLUETOOTH) return
         if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) chooseCar()
-        else showCar("Bluetooth permission is needed to start automatically with the car.")
+        else showCar(CarPicker.PERMISSION_NOTE)
     }
 }
