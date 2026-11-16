@@ -6,7 +6,7 @@ import { Connection, type Status } from './connection';
 import { demoApps, demoNotifs, DEMO_H, DEMO_W, startDemo } from './demo';
 import type { Codec } from './h26x';
 import { PANE_DPI, type AppInfo, type FromWorker, type PageMsg, type PaneLayout, type PaneStats, type PhoneMsg, type ToWorker } from './protocol';
-import { makeCert, weekStart } from './cert';
+import { formatCode, makeCert, weekStart } from './cert';
 import { ErrorWindow, fingerprint, LogRing, maskCode, resolveCode, shortUA, utcStamp } from './diag';
 import { afterClose, groupApps, refreshRecents } from './apps';
 import { acceptIcons, applyCache, chunkByBytes, ICON_REQUEST_BYTES, loadIcons, MAX_CACHED, saveIcons, validIcon, type CachedIcon } from './iconcache';
@@ -825,6 +825,16 @@ function showPairing(on: boolean) {
   $('f-cancel').hidden = !s.code && !DEMO;
   renderDisplay();
 }
+
+// Upper case and dashes while typing, so the code reads like the phone shows it.
+$<HTMLInputElement>('f-code').addEventListener('input', (e) => {
+  const el = e.target as HTMLInputElement;
+  const { value, caret } = formatCode(el.value, el.selectionStart ?? el.value.length);
+  if (value !== el.value) {
+    el.value = value;
+    el.setSelectionRange(caret, caret);
+  }
+});
 
 form.addEventListener('submit', (e) => {
   e.preventDefault();

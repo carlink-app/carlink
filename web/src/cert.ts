@@ -20,6 +20,23 @@ export function normalizeCode(code: string): string {
   return code.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
 }
 
+/** Characters in a pairing code (phone side: Prefs.newCode). */
+export const CODE_LENGTH = 12;
+
+/**
+ * As typed in the pairing field: upper case, only letters and digits, grouped
+ * by four with dashes ("abcdefg" -> "ABCD-EFG"), at most CODE_LENGTH
+ * characters. [caret] (index in [raw]) comes back moved to the same character.
+ */
+export function formatCode(raw: string, caret = raw.length): { value: string; caret: number } {
+  const before = normalizeCode(raw.slice(0, caret)).length;
+  const chars = normalizeCode(raw).slice(0, CODE_LENGTH);
+  const value = chars.replace(/(.{4})(?=.)/g, '$1-');
+  const n = Math.min(before, chars.length);
+  // Position after the n-th character: n plus the dashes before it.
+  return { value, caret: n + Math.floor(Math.max(0, n - 1) / 4) };
+}
+
 /** Monday 00:00 UTC of the week containing `unixSecs`. */
 export function weekStart(unixSecs: number): number {
   return FIRST_MONDAY + Math.floor((unixSecs - FIRST_MONDAY) / WEEK_SECS) * WEEK_SECS;

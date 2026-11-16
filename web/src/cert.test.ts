@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { certHashes, makeCert, normalizeCode, toHex, weekStart, WEEK_SECS } from './cert';
+import { certHashes, formatCode, makeCert, normalizeCode, toHex, weekStart, WEEK_SECS } from './cert';
 
 describe('cert', () => {
   it('normalizes codes', () => {
@@ -31,5 +31,25 @@ describe('cert', () => {
     expect(toHex(now)).toBe('2fdf659c522b8e77a8d5d86953e1a0b67a313cd615cd5ba265136e5a11486009');
     expect(toHex(prev)).toBe(toHex(makeCert('abcd-efgh-jklm', 1_794_744_000 - WEEK_SECS).hash));
     expect(toHex(prev)).not.toBe(toHex(now));
+  });
+});
+
+describe('formatCode', () => {
+  it('upper-cases, drops separators and junk, groups by four', () => {
+    expect(formatCode('abcdefghjklm').value).toBe('ABCD-EFGH-JKLM');
+    expect(formatCode('ab cd_ef.gh').value).toBe('ABCD-EFGH');
+    expect(formatCode('ABCD-').value).toBe('ABCD');
+    expect(formatCode('').value).toBe('');
+  });
+  it('stops at twelve characters', () => {
+    expect(formatCode('ABCDEFGHJKLMNPQR').value).toBe('ABCD-EFGH-JKLM');
+  });
+  it('keeps the caret after the same character', () => {
+    // Typing the 5th character at the end: caret after "ABCD-E".
+    expect(formatCode('ABCDE', 5)).toEqual({ value: 'ABCD-E', caret: 6 });
+    // Caret in the middle (after "ab"): stays after "AB".
+    expect(formatCode('abXcdefgh', 2)).toEqual({ value: 'ABXC-DEFG-H', caret: 2 });
+    // Pasting a dashed code: caret at the end.
+    expect(formatCode('ABCD-EFGH-JKLM', 14)).toEqual({ value: 'ABCD-EFGH-JKLM', caret: 14 });
   });
 });
