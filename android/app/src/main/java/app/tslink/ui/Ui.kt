@@ -138,7 +138,6 @@ class Ui(private val ctx: Context) {
         }
     }
 
-    /** The screen: [content] scrolling, edge to edge (always on with targetSdk 36) but clear of the system bars. */
     /**
      * Edge-to-edge scrolling screen. A bar the colour of the window sits under
      * the status bar, so content scrolling up doesn't show through it.

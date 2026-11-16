@@ -6,7 +6,7 @@ describe('Connection without WebTransport', () => {
     expect(typeof WebTransport).toBe('undefined'); // node has none
     const statuses: Status[] = [];
     const hooks: ConnectionHooks = {
-      settings: () => ({ code: 'ABCD-EFGH-JKLM', host: '9.9.0.1', port: 4433, showText: true }),
+      settings: () => ({ code: 'ABCD-EFGH-JKLM', host: '9.9.0.1', port: 4433 }),
       layout: () => [],
       codecs: async () => ['h264'],
       onStatus: (st) => statuses.push(st),

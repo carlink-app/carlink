@@ -72,6 +72,8 @@ class MainActivity : Activity() {
     private lateinit var carTextView: TextView
     private lateinit var diagView: TextView
     private var engine: IEngine? = null
+    /** A bind is under way or done (cleared when the user stops the engine). */
+    private var binding = false
 
     private val connection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName, binder: IBinder) {
@@ -132,9 +134,6 @@ class MainActivity : Activity() {
         }
         return true
     }
-
-    /** A bind is under way or done (cleared when the user stops the engine). */
-    private var binding = false
 
     override fun onDestroy() {
         Shizuku.removeRequestPermissionResultListener(permissionListener)
@@ -449,7 +448,6 @@ class MainActivity : Activity() {
 
     // ---- Diagnostics --------------------------------------------------------
 
-    /** Recent engine log (logcat as shell), to read or share after a car test. */
     /** Encoders, encode speed and car display support, without a car (see SelfTest). */
     private fun deviceCheck() {
         // The message line is up in the Engine card: say it where the button is.
@@ -463,6 +461,7 @@ class MainActivity : Activity() {
         }
     }
 
+    /** Recent engine log (logcat as shell), to read or share after a car test. */
     private fun showLog() {
         val e = engine ?: run {
             diagView.text = "Start the engine first to see its log."

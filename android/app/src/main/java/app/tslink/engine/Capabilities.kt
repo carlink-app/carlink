@@ -20,6 +20,8 @@ object Capabilities {
     private fun method(cls: Class<*>, name: String, vararg params: Class<*>) { cls.getMethod(name, *params) }
     private fun hasMethod(cls: Class<*>, name: String) = check(cls.methods.any { it.name == name }) { "no $name" }
     private fun aidl(service: String, aidl: String): Class<*> = Shell.service(service, aidl)!!.javaClass
+    private fun windowManager() = aidl("window", "android.view.IWindowManager")
+    private fun taskManager() = aidl("activity_task", "android.app.IActivityTaskManager")
     private val int = Int::class.javaPrimitiveType!!
     private val long = Long::class.javaPrimitiveType!!
     private val bool = Boolean::class.javaPrimitiveType!!
@@ -28,12 +30,12 @@ object Capabilities {
         Probe("injectInputEvent", "touch from the car") { method(InputManager::class.java, "injectInputEvent", InputEvent::class.java, int) },
         Probe("InputEvent.setDisplayId", "touch from the car") { method(InputEvent::class.java, "setDisplayId", int) },
         Probe("keyboard on display", "keyboard on the car screen") {
-            val wm = aidl("window", "android.view.IWindowManager")
+            val wm = windowManager()
             if (Build.VERSION.SDK_INT >= 31) method(wm, "setDisplayImePolicy", int, int) else method(wm, "setShouldShowIme", int, bool)
         },
-        Probe("isKeyguardLocked", "phone screen handling (lock state)") { method(aidl("window", "android.view.IWindowManager"), "isKeyguardLocked") },
-        Probe("isKeyguardSecure", "phone screen handling (keep an unlocked phone on)") { method(aidl("window", "android.view.IWindowManager"), "isKeyguardSecure", int) },
-        Probe("lockNow", "phone screen handling (lock before going dark)") { method(aidl("window", "android.view.IWindowManager"), "lockNow", android.os.Bundle::class.java) },
+        Probe("isKeyguardLocked", "phone screen handling (lock state)") { method(windowManager(), "isKeyguardLocked") },
+        Probe("isKeyguardSecure", "phone screen handling (keep an unlocked phone on)") { method(windowManager(), "isKeyguardSecure", int) },
+        Probe("lockNow", "phone screen handling (lock before going dark)") { method(windowManager(), "lockNow", android.os.Bundle::class.java) },
         Probe("PowerManager.wakeUp", "phone screen handling (wake)") { method(PowerManager::class.java, "wakeUp", long, int, String::class.java) },
         Probe("PowerManager.goToSleep", "phone screen handling (sleep after the drive)") { method(PowerManager::class.java, "goToSleep", long) },
         Probe("display wake lock", "car screen awake while idle (Android 12+; older ones give it its own power)") { method(PowerManager::class.java, "newWakeLock", int, String::class.java, int) },
@@ -41,9 +43,9 @@ object Capabilities {
             if (Build.VERSION.SDK_INT >= 34) Class.forName("com.android.internal.os.ClassLoaderFactory") // DisplayControl lives in services.jar
             else method(Class.forName("android.view.SurfaceControl"), "setDisplayPowerMode", IBinder::class.java, int)
         },
-        Probe("getAllRootTaskInfos", "start apps fresh on the car screen (Android 12+)") { method(aidl("activity_task", "android.app.IActivityTaskManager"), "getAllRootTaskInfos") },
-        Probe("getAllRootTaskInfosOnDisplay", "close apps (falls back to `am`)") { method(aidl("activity_task", "android.app.IActivityTaskManager"), "getAllRootTaskInfosOnDisplay", int) },
-        Probe("removeTask", "close apps (falls back to `am`)") { method(aidl("activity_task", "android.app.IActivityTaskManager"), "removeTask", int) },
+        Probe("getAllRootTaskInfos", "start apps fresh on the car screen (Android 12+)") { method(taskManager(), "getAllRootTaskInfos") },
+        Probe("getAllRootTaskInfosOnDisplay", "close apps (falls back to `am`)") { method(taskManager(), "getAllRootTaskInfosOnDisplay", int) },
+        Probe("removeTask", "close apps (falls back to `am`)") { method(taskManager(), "removeTask", int) },
         Probe("TetheringRequest static address", "car hotspot (fixed 9.9.0.1)") {
             val la = Class.forName("android.net.LinkAddress")
             method(Class.forName("android.net.TetheringManager\$TetheringRequest\$Builder"), "setStaticIpv4Addresses", la, la)

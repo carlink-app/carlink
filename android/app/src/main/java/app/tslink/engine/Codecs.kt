@@ -8,7 +8,6 @@ import android.os.Build
 import android.util.Log
 
 object Codecs {
-    private const val TAG = "tslink"
     /** Highest format level for [configure] (all optional keys). */
     const val TOP_LEVEL = 3
 

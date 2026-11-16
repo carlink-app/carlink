@@ -10,7 +10,6 @@ import org.json.JSONObject
  * status bar). Public APIs; the shell may read the phone state.
  */
 object PhoneStatus {
-    private const val TAG = "tslink"
 
     /** `{"t":"phone","bat":0-100,"chg":bool,"sig":0-4 or -1,"net":"5G"|"LTE"|...}`; parts that can't be read are left out. */
     // READ_PHONE_STATE: the engine runs as the shell, which holds it; failures are caught.

@@ -15,7 +15,6 @@ import org.json.JSONObject
  * checks that a car display can be created. Runs in the engine (shell) process.
  */
 object SelfTest {
-    private const val TAG = "tslink"
     /** A car pane at the Tesla's default browser size is ~1036x918; this is the cap (capPane). */
     private val SIZES = listOf(1280 to 960, 1920 to 1080)
     private const val SECONDS = 3

@@ -68,7 +68,7 @@ class PhonePower(private val handler: Handler) {
             // Unlocked and lit (on the charging pad): just keep it on, no tricks.
             // Only a phone with a lock (PIN, pattern...) counts: without one it's never
             // "locked", and would stay lit all drive after a power button press.
-            val unlocked = interactive && !dark && keyguardSecure() && keyguardLocked() == false
+            val unlocked = interactive && !dark && keyguardSecure && keyguardLocked() == false
             if (unlocked != keptOn) keepOn(unlocked)
             when (pollStep(interactive, dark, ticks, litFor, screenTimeoutMs(), unlocked)) {
                 Step.LIGHTEN -> lighten()
@@ -158,20 +158,17 @@ class PhonePower(private val handler: Handler) {
         DEFAULT_LIT_MS
     }.coerceAtLeast(MIN_LIT_MS)
 
-    /** Through the window service: KeyguardManager doesn't work in the shell process. */
-    /** The phone has a secure lock screen (cached: it doesn't change mid-drive). Unknown: false. */
-    private val keyguardSecure: () -> Boolean = run {
-        var cached: Boolean? = null
-        {
-            cached ?: (try {
-                val wm = Shell.service("window", "android.view.IWindowManager")!!
-                wm.javaClass.getMethod("isKeyguardSecure", Int::class.javaPrimitiveType).invoke(wm, 0) as Boolean
-            } catch (e: Exception) {
-                false
-            }).also { cached = it }
+    /** The phone has a secure lock screen (read once: it doesn't change mid-drive). Unknown: false. */
+    private val keyguardSecure: Boolean by lazy {
+        try {
+            val wm = Shell.service("window", "android.view.IWindowManager")!!
+            wm.javaClass.getMethod("isKeyguardSecure", Int::class.javaPrimitiveType).invoke(wm, 0) as Boolean
+        } catch (e: Exception) {
+            false
         }
     }
 
+    /** Through the window service: KeyguardManager doesn't work in the shell process. */
     private fun keyguardLocked(): Boolean? = try {
         val wm = Shell.service("window", "android.view.IWindowManager")!!
         wm.javaClass.getMethod("isKeyguardLocked").invoke(wm) as Boolean

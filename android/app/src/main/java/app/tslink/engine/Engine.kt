@@ -83,18 +83,21 @@ class Engine(
 
     private fun sessionMsg(up: Boolean) = JSONObject().put("t", "session").put("up", up)
 
-    /** The app shows "connected to car" on the phone (lock screen included). */
     /** Battery and signal for the car's sidebar: sent when they change, checked every [PHONE_STATUS_MS]. */
     private var lastPhoneStatus = ""
     private val phoneStatus = object : Runnable {
         override fun run() {
             if (core.get() == 0L || !sessionUp) return
             val m = try { PhoneStatus.read() } catch (e: Exception) { null }
-            m?.toString()?.takeIf { it != lastPhoneStatus }?.let { lastPhoneStatus = it; send(m) }
+            if (m != null && m.toString() != lastPhoneStatus) {
+                lastPhoneStatus = m.toString()
+                send(m)
+            }
             handler.postDelayed(this, PHONE_STATUS_MS)
         }
     }
 
+    /** The app shows "connected to car" on the phone (lock screen included). */
     private fun reportSession(up: Boolean) {
         sessionUp = up
         toApp?.invoke(sessionMsg(up))
