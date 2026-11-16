@@ -10,7 +10,7 @@ crate-type = ["cdylib", "rlib"]
 android_logger = "0.15.1"
 anyhow = "1.0.104"
 base64 = "0.23"
-jni = "0.21"
+jni = "0.22"
 log = "0.4.35"
 p256 = { version = "0.14", features = ["ecdsa", "pkcs8"] }
 ring = "0.17"
