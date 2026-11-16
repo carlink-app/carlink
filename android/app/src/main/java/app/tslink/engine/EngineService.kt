@@ -52,8 +52,7 @@ class EngineService : IEngine.Stub() {
     override fun startPairing(secret: String): String {
         if (!fromTSLink()) return "denied"
         val current = engine ?: return "start the engine first"
-        val s = secret.filter { it.isLetterOrDigit() }.uppercase()
-        if (s.length !in 16..64) return "not a TSLink pairing code"
+        val s = pairingSecret(secret) ?: return "not a TSLink pairing code"
         current.stop(waitMs = 2_000)
         val gen = ++pairingGen
         engine = Engine(s, port, allow, handover = code).also { e ->
@@ -171,3 +170,7 @@ class EngineService : IEngine.Stub() {
         const val PAIRING_MS = 120_000L
     }
 }
+
+/** [raw] as the engine's stand-in code while pairing: letters and digits only, upper case; null unless 16..64 long. */
+internal fun pairingSecret(raw: String): String? =
+    raw.filter { it.isLetterOrDigit() }.uppercase().takeIf { it.length in 16..64 }

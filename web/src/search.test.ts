@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { appsByLetter, filterApps, letterOf, letters } from './search';
+import { appsByLetter, filterApps, fold, letterOf, letters } from './search';
 import type { AppInfo } from './protocol';
 
 const app = (label: string, pkg = `p.${label}`): AppInfo => ({ pkg, cls: 'Main', label });
@@ -46,5 +46,29 @@ describe('appsByLetter', () => {
     const list = [{ ...app('Spotify'), cat: 'music' }, app('Maps'), { ...app('signal'), cat: 'social' }, app('Settings')] as AppInfo[];
     expect(appsByLetter(list, 'S').map((a) => a.label)).toEqual(['Settings', 'signal', 'Spotify']);
     expect(appsByLetter(list, 'Q')).toEqual([]);
+  });
+});
+
+describe('search edge cases', () => {
+  it('fold strips accents and case', () => {
+    expect(fold('Ça Été')).toBe('ca ete');
+    expect(fold('')).toBe('');
+  });
+  it('leading spaces in a label do not change its letter', () => {
+    expect(letterOf(app('  waze'))).toBe('W');
+  });
+  it('a missing label falls back to the package name', () => {
+    const noLabel = { pkg: 'com.maps', cls: 'M' } as unknown as AppInfo;
+    expect(letterOf(noLabel)).toBe('C');
+    expect(filterApps([noLabel], 'maps')).toEqual([noLabel]);
+  });
+  it('the query is matched against the label, not the package', () => {
+    expect(filterApps([app('Music', 'com.spotify')], 'spotify')).toEqual([]);
+  });
+  it('accented query matches plain label', () => {
+    expect(filterApps([app('Cafe')], 'CAFÉ').map((a) => a.label)).toEqual(['Cafe']);
+  });
+  it('# lists digit and symbol apps', () => {
+    expect(appsByLetter([app('7-Eleven'), app('@home'), app('Maps')], '#').map((a) => a.label)).toEqual(['@home', '7-Eleven']);
   });
 });

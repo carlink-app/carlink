@@ -36,4 +36,46 @@ class MediaTest {
         assertFalse(Media.sanitize(msg().put("art", big))!!.has("art"))
         assertTrue(Media.sanitize(msg().put("art", "data:image/jpeg;base64,AAAA"))!!.has("art"))
     }
+
+    @Test fun noneWinsAndDropsEverythingElse() {
+        val m = Media.sanitize(msg().put("none", true))!!
+        assertTrue(m.getBoolean("none"))
+        assertFalse(m.has("title"))
+        assertFalse(m.has("pkg"))
+    }
+
+    @Test fun packageNameRules() {
+        assertNull(Media.sanitize(msg().put("pkg", "")))
+        assertNull(Media.sanitize(JSONObject().put("title", "T")))
+        assertNull(Media.sanitize(msg().put("pkg", "a".repeat(201))))
+        assertNull(Media.sanitize(msg().put("pkg", "com.x/../y")))
+        assertEquals("com.x_y.z1", Media.sanitize(msg().put("pkg", "com.x_y.z1"))!!.getString("pkg"))
+    }
+
+    @Test fun missingFieldsDefault() {
+        val m = Media.sanitize(JSONObject().put("pkg", "com.a").put("title", "T"))!!
+        assertEquals("", m.getString("app"))
+        assertEquals("", m.getString("artist"))
+        assertFalse(m.getBoolean("playing"))
+        assertFalse(m.getBoolean("prev"))
+        assertFalse(m.getBoolean("next"))
+    }
+
+    @Test fun capsAppAndArtist() {
+        val m = Media.sanitize(msg().put("app", "a".repeat(100)).put("artist", "b".repeat(300)))!!
+        assertEquals(60, m.getString("app").length)
+        assertEquals(120, m.getString("artist").length)
+    }
+
+    @Test fun artFormats() {
+        // MediaWatch sends "" while the cover is still being encoded.
+        assertFalse(Media.sanitize(msg().put("art", ""))!!.has("art"))
+        assertTrue(Media.sanitize(msg().put("art", "data:image/png;base64,AAAA"))!!.has("art"))
+        assertFalse(Media.sanitize(msg().put("art", "data:image/svg+xml;base64,AAAA"))!!.has("art"))
+        val atLimit = "data:image/jpeg;base64,".let { it + "A".repeat(32 * 1024 - it.length) }
+        assertTrue(Media.sanitize(msg().put("art", atLimit))!!.has("art"))
+        assertFalse(Media.sanitize(msg().put("art", atLimit + "A"))!!.has("art"))
+    }
+
+    @Test fun commands() = assertEquals(setOf("play", "pause", "next", "prev"), Media.COMMANDS)
 }

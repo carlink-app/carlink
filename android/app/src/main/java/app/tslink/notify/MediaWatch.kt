@@ -81,7 +81,7 @@ class MediaWatch(
 
     /** The playing session, else the most recent one (the list is newest first). */
     private fun pick(list: List<MediaController>) {
-        val c = list.firstOrNull { it.playbackState?.state == PlaybackState.STATE_PLAYING } ?: list.firstOrNull()
+        val c = pickSession(list) { it.playbackState?.state == PlaybackState.STATE_PLAYING }
         if (c?.sessionToken != current?.sessionToken) {
             current?.unregisterCallback(callback)
             current = c
@@ -104,7 +104,7 @@ class MediaWatch(
                 .put("app", label(c.packageName))
                 .put("title", title)
                 .put("artist", meta?.getString(MediaMetadata.METADATA_KEY_ARTIST) ?: meta?.getString(MediaMetadata.METADATA_KEY_ALBUM_ARTIST).orEmpty())
-                .put("playing", st?.state == PlaybackState.STATE_PLAYING || st?.state == PlaybackState.STATE_BUFFERING)
+                .put("playing", playingState(st?.state))
                 .put("prev", actions and PlaybackState.ACTION_SKIP_TO_PREVIOUS != 0L)
                 .put("next", actions and PlaybackState.ACTION_SKIP_TO_NEXT != 0L)
                 .put("art", art(meta).orEmpty())
@@ -155,3 +155,9 @@ class MediaWatch(
         const val MAX_ART = 32 * 1024
     }
 }
+
+/** The session to follow: the first playing one, else the first (lists are newest first). */
+internal fun <T> pickSession(list: List<T>, playing: (T) -> Boolean): T? = list.firstOrNull(playing) ?: list.firstOrNull()
+
+/** "Playing" for the car's play/pause button: buffering counts (the track is about to play). */
+internal fun playingState(state: Int?): Boolean = state == PlaybackState.STATE_PLAYING || state == PlaybackState.STATE_BUFFERING

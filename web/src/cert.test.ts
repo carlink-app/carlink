@@ -53,3 +53,26 @@ describe('formatCode', () => {
     expect(formatCode('ABCD-EFGH-JKLM', 14)).toEqual({ value: 'ABCD-EFGH-JKLM', caret: 14 });
   });
 });
+
+describe('formatCode caret edge cases', () => {
+  it('caret at the start stays there', () => {
+    expect(formatCode('abcdef', 0)).toEqual({ value: 'ABCD-EF', caret: 0 });
+  });
+  it('typing the 4th character: no dash yet, caret right after it', () => {
+    expect(formatCode('ABCD', 4)).toEqual({ value: 'ABCD', caret: 4 });
+  });
+  it('backspace over a dash leaves the code and puts the caret before the dash', () => {
+    // "ABCD-E" with the dash deleted: "ABCDE", caret 4.
+    expect(formatCode('ABCDE', 4)).toEqual({ value: 'ABCD-E', caret: 4 });
+  });
+  it('a caret beyond twelve characters lands at the end', () => {
+    expect(formatCode('ABCDEFGHJKLMNP', 14)).toEqual({ value: 'ABCD-EFGH-JKLM', caret: 14 });
+  });
+  it('junk before the caret is not counted', () => {
+    expect(formatCode('a b c', 3)).toEqual({ value: 'ABC', caret: 2 });
+  });
+  it('the formatted value normalizes back to the code', () => {
+    const { value } = formatCode('abcd efgh jklm');
+    expect(normalizeCode(value)).toBe('ABCDEFGHJKLM');
+  });
+});

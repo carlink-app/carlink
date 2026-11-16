@@ -55,3 +55,16 @@ describe('helpFor', () => {
     expect(h.retry).toBe(false);
   });
 });
+
+describe('help edge cases', () => {
+  it('certificate errors are handshake trouble', () => {
+    expect(helpKind('Certificate hash mismatch')).toBe('handshake');
+  });
+  it('the browser kind needs the exact text (not a prefix)', () => {
+    expect(helpKind(`${NO_WEBTRANSPORT} · retrying in 1s`)).toBe('browser');
+    expect(helpKind(`${NO_WEBTRANSPORT}!`)).toBe('unreachable');
+  });
+  it('errorText keeps a dot in the middle of the text', () => {
+    expect(errorText('a · b · retrying in 3s')).toBe('a · b');
+  });
+});

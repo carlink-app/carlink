@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { attachLongPress, LONG_PRESS_MS } from './longpress';
+import { attachLongPress, LONG_PRESS_MS, LONG_PRESS_SLOP } from './longpress';
 
 const ev = (type: string, x = 0, y = 0, extra: object = {}) =>
   Object.assign(new Event(type, { cancelable: true }), { clientX: x, clientY: y, pointerId: 1, isPrimary: true, ...extra });
@@ -62,5 +62,80 @@ describe('attachLongPress', () => {
     el.dispatchEvent(ev('pointerdown', 50, 50, { pointerId: 2, isPrimary: false }));
     vi.advanceTimersByTime(LONG_PRESS_MS * 2);
     expect(onLong).not.toHaveBeenCalled();
+  });
+});
+
+describe('attachLongPress details', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  const setup = (ms?: number) => {
+    const el = new EventTarget();
+    const onLong = vi.fn();
+    attachLongPress(el, onLong, ms);
+    return { el, onLong };
+  };
+
+  it('movement within the slop still fires; just past it cancels', () => {
+    const a = setup();
+    a.el.dispatchEvent(ev('pointerdown', 0, 0));
+    a.el.dispatchEvent(ev('pointermove', LONG_PRESS_SLOP, 0));
+    vi.advanceTimersByTime(LONG_PRESS_MS);
+    expect(a.onLong).toHaveBeenCalledTimes(1);
+    const b = setup();
+    b.el.dispatchEvent(ev('pointerdown', 0, 0));
+    b.el.dispatchEvent(ev('pointermove', LONG_PRESS_SLOP + 1, 0));
+    vi.advanceTimersByTime(LONG_PRESS_MS);
+    expect(b.onLong).not.toHaveBeenCalled();
+  });
+
+  it('moves of another pointer are ignored', () => {
+    const { el, onLong } = setup();
+    el.dispatchEvent(ev('pointerdown', 0, 0));
+    el.dispatchEvent(ev('pointermove', 100, 100, { pointerId: 9 }));
+    vi.advanceTimersByTime(LONG_PRESS_MS);
+    expect(onLong).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaving the button or lifting early cancels', () => {
+    for (const t of ['pointerleave', 'pointerup']) {
+      const { el, onLong } = setup();
+      el.dispatchEvent(ev('pointerdown'));
+      vi.advanceTimersByTime(LONG_PRESS_MS - 1);
+      el.dispatchEvent(ev(t));
+      vi.advanceTimersByTime(LONG_PRESS_MS);
+      expect(onLong, t).not.toHaveBeenCalled();
+    }
+  });
+
+  it('a custom duration', () => {
+    const { el, onLong } = setup(200);
+    el.dispatchEvent(ev('pointerdown'));
+    vi.advanceTimersByTime(199);
+    expect(onLong).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(onLong).toHaveBeenCalledTimes(1);
+  });
+
+  it('the swallowed click is cancelled; the context menu never opens', () => {
+    const { el } = setup();
+    el.dispatchEvent(ev('pointerdown'));
+    vi.advanceTimersByTime(LONG_PRESS_MS);
+    const click = ev('click');
+    el.dispatchEvent(click);
+    expect(click.defaultPrevented).toBe(true);
+    const menu = ev('contextmenu');
+    el.dispatchEvent(menu);
+    expect(menu.defaultPrevented).toBe(true);
+  });
+
+  it('after a second finger cancelled, a fresh press works again', () => {
+    const { el, onLong } = setup();
+    el.dispatchEvent(ev('pointerdown'));
+    el.dispatchEvent(ev('pointerdown', 0, 0, { pointerId: 2, isPrimary: false }));
+    el.dispatchEvent(ev('pointerup'));
+    el.dispatchEvent(ev('pointerdown'));
+    vi.advanceTimersByTime(LONG_PRESS_MS);
+    expect(onLong).toHaveBeenCalledTimes(1);
   });
 });
