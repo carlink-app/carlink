@@ -21,6 +21,7 @@ describe('settings', () => {
     expect(validPort('0')).toBeNull();
     expect(validPort('70000')).toBeNull();
     expect(validPort('abc')).toBeNull();
+    expect(validPort('65535')).toBeNull(); // the pairing port is the next one
     expect(validPort('')).toBeNull();
     expect(validPort('  ')).toBeNull();
     expect(validPort('44.5')).toBeNull();
@@ -163,7 +164,7 @@ describe('addressError', () => {
     expect(addressError('  ', '4433')).toBe('Enter the phone address.');
   });
   it('needs a port in range', () => {
-    expect(addressError('9.9.0.1', '0')).toBe('Port must be 1–65535.');
-    expect(addressError('9.9.0.1', 'abc')).toBe('Port must be 1–65535.');
+    expect(addressError('9.9.0.1', '0')).toBe('Port must be 1–65534.');
+    expect(addressError('9.9.0.1', 'abc')).toBe('Port must be 1–65534.');
   });
 });

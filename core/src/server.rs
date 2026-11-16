@@ -116,8 +116,9 @@ pub struct Server {
 // pages after failed WebTransport handshakes). The code it gets is sealed
 // with a key from the QR secret.
 
-/// Car pages waiting at once (only the car subnet can connect).
+/// Car pages waiting at once (only the car subnet can connect), and per address.
 const MAX_PAIR_WAITING: usize = 8;
+const MAX_PAIR_PER_ADDRESS: usize = 2;
 /// A page announces its tag this soon after connecting.
 const PAIR_HELLO_TIMEOUT: Duration = Duration::from_secs(10);
 /// A page waits this long for the scan, then reconnects.
@@ -126,8 +127,8 @@ const PAIR_WAIT: Duration = Duration::from_secs(180);
 const PAIR_OFFER: Duration = Duration::from_secs(120);
 
 struct Waiter {
+    id: u64,
     tag: String,
-    remote: String,
     tx: tokio::sync::oneshot::Sender<String>,
 }
 
@@ -136,6 +137,31 @@ struct Pairing {
     waiting: Vec<Waiter>,
     /// After a scan: the tag it is for, the sealed message, until when.
     offer: Option<(String, String, Instant)>,
+    /// Pairing connections per address (handshaking or waiting).
+    per_address: HashMap<IpAddr, usize>,
+    next_id: u64,
+}
+
+/// Gives back a connection's per-address slot and its waiter entry when its task ends, however it ends.
+struct PairSlot {
+    pairing: Arc<Mutex<Pairing>>,
+    ip: IpAddr,
+    waiter: Option<u64>,
+}
+
+impl Drop for PairSlot {
+    fn drop(&mut self) {
+        let mut p = self.pairing.lock().unwrap();
+        if let Some(n) = p.per_address.get_mut(&self.ip) {
+            *n -= 1;
+            if *n == 0 {
+                p.per_address.remove(&self.ip);
+            }
+        }
+        if let Some(id) = self.waiter {
+            p.waiting.retain(|w| w.id != id);
+        }
+    }
 }
 
 impl Pairing {
@@ -175,6 +201,17 @@ async fn handle_pair_session(
         incoming.refuse();
         anyhow::bail!("pairing: refused {ip}: too many waiting");
     };
+    let mut slot = {
+        let mut p = pairing.lock().unwrap();
+        let n = p.per_address.entry(ip).or_insert(0);
+        if *n >= MAX_PAIR_PER_ADDRESS {
+            drop(p);
+            incoming.refuse();
+            anyhow::bail!("pairing: refused {ip}: too many from it");
+        }
+        *n += 1;
+        PairSlot { pairing: pairing.clone(), ip, waiter: None }
+    };
     let request = tokio::time::timeout(HANDSHAKE_TIMEOUT, incoming.into_future()).await.map_err(|_| anyhow::anyhow!("pairing handshake timeout"))??;
     if request.path() != "/pair" {
         request.not_found().await;
@@ -197,29 +234,49 @@ async fn handle_pair_session(
     .map_err(|_| anyhow::anyhow!("no pairing hello"))??;
 
     // Already scanned: take it now; else wait for the scan (or give up and let the page reconnect).
-    // The tag is one-way (it reveals nothing of the secret); a few characters tell pages apart in logs.
+    // One lock for both, so a scan can't land in between. The tag is one-way (it
+    // reveals nothing of the secret); a few characters tell pages apart in logs.
     log::info!("pairing: page {remote} waiting (tag {})", &tag[..6]);
-    let ready = pairing.lock().unwrap().take_offer(&tag);
-    let message = match ready {
-        Some(m) => {
-            listener.on_paired(&remote);
-            m
+    let ready = {
+        let mut p = pairing.lock().unwrap();
+        match p.take_offer(&tag) {
+            Some(m) => Ok(m),
+            None => {
+                let (tx, rx) = tokio::sync::oneshot::channel();
+                p.next_id += 1;
+                let id = p.next_id;
+                p.waiting.push(Waiter { id, tag: tag.clone(), tx });
+                slot.waiter = Some(id);
+                Err(rx)
+            }
         }
-        None => {
-            let (tx, rx) = tokio::sync::oneshot::channel();
-            pairing.lock().unwrap().waiting.push(Waiter { tag, remote: remote.clone(), tx });
-            match tokio::time::timeout(PAIR_WAIT, rx).await {
-                Ok(Ok(m)) => m,
-                _ => {
+    };
+    let message = match ready {
+        Ok(m) => m,
+        Err(rx) => {
+            // Until the scan, the page leaving (reload, Wi-Fi drop) or the wait running out.
+            let got = tokio::select! {
+                m = rx => m.ok(),
+                _ = conn.closed() => None,
+                _ = tokio::time::sleep(PAIR_WAIT) => None,
+            };
+            match got {
+                Some(m) => m,
+                None => {
                     conn.close(wtransport::VarInt::from_u32(0), b"no scan");
-                    anyhow::bail!("pairing: no scan for {remote}");
+                    anyhow::bail!("pairing: {remote} left or no scan");
                 }
             }
         }
     };
-    write_line(&mut send, &message).await?;
-    let _ = send.finish().await;
+    if let Err(e) = write_line(&mut send, &message).await {
+        // Gone just now: keep the code for the page coming back under this tag.
+        pairing.lock().unwrap().offer = Some((tag, message, Instant::now() + PAIR_OFFER));
+        anyhow::bail!("pairing: sending to {remote} failed: {e}");
+    }
+    listener.on_paired(&remote);
     log::info!("pairing: code sent to {remote}");
+    let _ = send.finish().await;
     // A moment for the page to read it before the connection goes.
     tokio::time::sleep(Duration::from_millis(500)).await;
     conn.close(wtransport::VarInt::from_u32(0), b"paired");
@@ -522,9 +579,10 @@ impl Server {
 
         let pairing = Arc::new(Mutex::new(Pairing::default()));
         {
-            let (config, _) = server_config(opts.port + 1, crate::pair::CERT_NAME)?;
+            let pair_port = opts.port.checked_add(1).ok_or_else(|| anyhow::anyhow!("port {} leaves no room for the pairing port", opts.port))?;
+            let (config, _) = server_config(pair_port, crate::pair::CERT_NAME)?;
             let endpoint = Arc::new(rt.block_on(async { Endpoint::server(config) })?);
-            spawn_rotation(&rt, endpoint.clone(), opts.port + 1, crate::pair::CERT_NAME.to_string(), week);
+            spawn_rotation(&rt, endpoint.clone(), pair_port, crate::pair::CERT_NAME.to_string(), week);
             let (pairing, listener, allow) = (pairing.clone(), listener.clone(), allow.clone());
             let slots = Arc::new(Semaphore::new(MAX_PAIR_WAITING));
             rt.spawn(async move {
@@ -552,19 +610,14 @@ impl Server {
         let tag = crate::pair::tag(secret);
         let message = paired_message(secret, code);
         let mut p = self.pairing.lock().unwrap();
-        p.waiting.retain(|w| !w.tx.is_closed()); // pages that gave up
         log::info!("pairing: scan for tag {} ({} page(s) waiting)", &tag[..6], p.waiting.len());
-        if let Some(i) = p.waiting.iter().position(|w| w.tag == tag) {
-            let w = p.waiting.remove(i);
-            p.offer = None;
-            drop(p);
-            match w.tx.send(message) {
-                Ok(()) => return self.listener.on_paired(&w.remote),
-                Err(m) => {
-                    p = self.pairing.lock().unwrap();
-                    p.offer = Some((tag, m, Instant::now() + PAIR_OFFER));
-                    return;
-                }
+        p.offer = None;
+        // The newest page under this tag (an older one may be a reload's leftover).
+        let mut message = message;
+        while let Some(i) = p.waiting.iter().rposition(|w| w.tag == tag) {
+            match p.waiting.remove(i).tx.send(message) {
+                Ok(()) => return, // its task sends it and reports on_paired
+                Err(m) => message = m, // that task already ended: try the next
             }
         }
         p.offer = Some((tag, message, Instant::now() + PAIR_OFFER));

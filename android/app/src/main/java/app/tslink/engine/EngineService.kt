@@ -11,21 +11,12 @@ import kotlin.system.exitProcess
 class EngineService : IEngine.Stub() {
     private var engine: Engine? = null
     private var client: IEngineClient? = null
-    // What the running engine was started with, to come back after pairing.
+    // What the running engine was started with.
     private var code = ""
     private var port = 0
     private var allow = ""
-    /** Bumped per pairing attempt: a stale timeout must not end a newer one. */
-    private var pairingGen = 0
-    /** Last pairing attempt for the app: "", "waiting", "paired <car address>", "expired". */
-    @Volatile private var pairing = ""
-    private val appUid = AppUid {
-        try {
-            Shell.context.packageManager.getPackageUid(APP_PACKAGE, 0)
-        } catch (_: android.content.pm.PackageManager.NameNotFoundException) {
-            -1 // uninstalled: nobody is TSLink
-        }
-    }
+    private val pairing = PairingStatus()
+    private val appUid = AppUid(::installedApp)
 
     init {
         // Shizuku keeps this process when TSLink is uninstalled: it would go on
@@ -34,8 +25,14 @@ class EngineService : IEngine.Stub() {
         Thread({
             while (true) {
                 Thread.sleep(UNINSTALL_CHECK_MS)
-                if (appUid.gone()) {
-                    Log.i(TAG, "TSLink was uninstalled: stopping")
+                val gone = try {
+                    appUid.gone()
+                } catch (t: Throwable) {
+                    Log.w(TAG, "uninstall check: $t")
+                    false // a hiccup is not an uninstall; check again later
+                }
+                if (gone) {
+                    Log.i(TAG, "TSLink was uninstalled (or replaced by another signer): stopping")
                     destroy()
                 }
             }
@@ -85,22 +82,16 @@ class EngineService : IEngine.Stub() {
         if (!fromTSLink()) return "denied"
         val current = engine ?: return "error: TSLink is off, start it first"
         val s = pairingSecret(secret) ?: return "not a TSLink pairing code"
-        val gen = ++pairingGen
-        current.onPaired = { remote -> if (gen == pairingGen) pairing = "paired $remote" }
+        // Waiting first: with the page already there, the core reports the hand-over during pair().
+        val gen = pairing.begin()
+        current.onPaired = { remote -> pairing.paired(gen, remote) }
         current.pair(s)
-        pairing = "waiting"
-        Thread { Thread.sleep(PAIRING_MS); expirePairing(gen) }.start()
+        Thread { Thread.sleep(PAIRING_MS); pairing.expire(gen) }.start()
         Log.i(TAG, "pairing: waiting for the car page (up to ${PAIRING_MS / 1000} s)")
         return "pairing"
     }
 
-    /** No car page took pairing attempt [gen] in time. */
-    @Synchronized
-    private fun expirePairing(gen: Int) {
-        if (gen == pairingGen && pairing == "waiting") pairing = "expired"
-    }
-
-    override fun pairingResult(): String = if (fromTSLink()) pairing else ""
+    override fun pairingResult(): String = if (fromTSLink()) pairing.value else ""
 
     // Synchronized: one at a time (a double tap), and not alongside start/stop.
     @Synchronized
@@ -128,8 +119,7 @@ class EngineService : IEngine.Stub() {
     @Synchronized
     override fun stop() {
         if (!fromTSLink()) return
-        pairingGen++ // a pending pairing end must not restart a stopped engine
-        pairing = ""
+        pairing.reset()
         // Wait for the port to be free: a start right after (Unpair all cars) binds it again.
         engine?.stop(waitMs = 2_000)
         engine = null
@@ -237,18 +227,75 @@ internal fun <T> retryWhileInUse(tries: Int = 10, waitMs: Long = 200, sleep: (Lo
  * TSLink's uid, as callers are checked against it. Looked up again when a
  * caller doesn't match: this process can outlive an uninstall + install
  * (Shizuku keeps it), which gives the app a new uid; a cached one would
- * deny the new app everything ("denied").
+ * deny the new app everything ("denied"). The signer seen first is pinned:
+ * another app installed under the name, with another key, is not TSLink.
  */
-internal class AppUid(private val lookup: () -> Int) {
+internal class AppUid(private val lookup: () -> Install?) {
+    /** An installed app.tslink: its uid and its signing certificate(s), as one string. */
+    data class Install(val uid: Int, val signer: String)
+
+    @Volatile private var signer: String? = null
     @Volatile private var cached: Int? = null
 
-    /** TSLink was uninstalled (the lookup finds no package). */
-    fun gone(): Boolean = lookup().also { cached = it } < 0
-
-    fun isApp(caller: Int): Boolean {
-        if (caller == cached) return true
+    /** TSLink's uid now, or null if it isn't installed (or another signer is). */
+    @Synchronized
+    private fun current(): Int? {
         val now = lookup()
-        cached = now
-        return caller == now
+        val pinned = signer ?: now?.signer.also { signer = it }
+        val uid = now?.takeIf { it.signer == pinned }?.uid
+        cached = uid
+        return uid
     }
+
+    /** TSLink was uninstalled (or replaced by an app with another key). */
+    fun gone(): Boolean = current() == null
+
+    fun isApp(caller: Int): Boolean = caller == cached || caller == current()
+}
+
+/**
+ * The phone app's view of the last QR pairing: "", "waiting", "paired <car
+ * address>", "expired". Each scan is a generation, so a late report of an
+ * older scan, or one from before Stop, changes nothing.
+ */
+internal class PairingStatus {
+    private var gen = 0
+
+    @Volatile var value = ""
+        private set
+
+    /** A scan: wait for its car page. */
+    @Synchronized
+    fun begin(): Int {
+        value = "waiting"
+        return ++gen
+    }
+
+    @Synchronized
+    fun paired(g: Int, remote: String) {
+        if (g == gen) value = "paired $remote"
+    }
+
+    @Synchronized
+    fun expire(g: Int) {
+        if (g == gen && value == "waiting") value = "expired"
+    }
+
+    @Synchronized
+    fun reset() {
+        gen++
+        value = ""
+    }
+}
+
+/** app.tslink as installed now: uid and signing certificates (SHA-256), or null if it isn't. */
+private fun installedApp(): AppUid.Install? = try {
+    val pm = Shell.context.packageManager
+    val info = pm.getPackageInfo(APP_PACKAGE, android.content.pm.PackageManager.GET_SIGNING_CERTIFICATES)
+    val signers = info.signingInfo?.apkContentsSigners.orEmpty()
+        .map { java.security.MessageDigest.getInstance("SHA-256").digest(it.toByteArray()).joinToString("") { b -> "%02x".format(b) } }
+        .sorted().joinToString(",")
+    AppUid.Install(info.applicationInfo!!.uid, signers)
+} catch (_: android.content.pm.PackageManager.NameNotFoundException) {
+    null // uninstalled: nobody is TSLink
 }

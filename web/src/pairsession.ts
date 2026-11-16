@@ -99,10 +99,15 @@ export class PairSession {
     let misses = 0;
     while (live()) {
       let code: string | null = null;
+      let answered = false;
       try {
-        code = await this.attempt(() => { misses = 0; this.hooks.onUnanswered(0); });
+        code = await this.attempt(() => { answered = true; misses = 0; this.hooks.onUnanswered(0); });
       } catch {
         if (!live()) return;
+        if (answered) { // the phone was there; the connection just dropped: wait again
+          await this.sleep(1000);
+          continue;
+        }
         misses++;
         this.hooks.onUnanswered(misses);
         await this.sleep(RETRY_MS[Math.min(misses, RETRY_MS.length) - 1]);

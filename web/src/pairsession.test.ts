@@ -29,12 +29,16 @@ describe('PairSession', () => {
   const enc = new TextEncoder();
   const PAIRED = '{"t":"paired","nonce":"AAAAAAAAAAAAAAAA","box":"SifG4lTAz4Gazfb0_xA6oTP915FRvmWD3eLpO31d"}\n';
 
-  /** A fake WebTransport: each attempt plays the next script: 'fail' or lines the phone sends. */
-  function fakeTransport(scripts: ('fail' | string[])[], log: { url: string; wrote: string }[]) {
+  /**
+   * A fake WebTransport: each attempt plays the next script: 'fail' (no
+   * handshake), lines the phone sends (then it waits), or 'closed' (the
+   * handshake works, then the phone closes without a code).
+   */
+  function fakeTransport(scripts: ('fail' | 'closed' | 'drop' | string[])[], log: { url: string; wrote: string }[]) {
     return class {
       ready: Promise<void>;
       closed = new Promise<never>(() => { /* open until close() */ });
-      private script: 'fail' | string[];
+      private script: 'fail' | 'closed' | 'drop' | string[];
       constructor(url: string) {
         this.script = scripts.shift() ?? 'fail';
         log.push({ url, wrote: '' });
@@ -42,12 +46,18 @@ describe('PairSession', () => {
         this.ready.catch(() => { /* awaited by the session */ });
       }
       async createBidirectionalStream() {
-        const lines = this.script === 'fail' ? [] : this.script;
+        const closed = this.script === 'closed';
+        const drop = this.script === 'drop';
+        const lines = Array.isArray(this.script) ? this.script : [];
         const entry = log[log.length - 1];
         return {
           writable: new WritableStream<Uint8Array>({ write(c) { entry.wrote += new TextDecoder().decode(c); } }),
           readable: new ReadableStream<Uint8Array>({
-            start(c) { for (const l of lines) c.enqueue(enc.encode(l)); /* then stays open: the phone waits */ },
+            start(c) {
+              for (const l of lines) c.enqueue(enc.encode(l));
+              if (closed) c.close(); // else stays open: the phone waits
+              if (drop) c.error(new Error('connection lost'));
+            },
           }),
         };
       }
@@ -55,7 +65,7 @@ describe('PairSession', () => {
     };
   }
 
-  async function run(scripts: ('fail' | string[])[], ms: number) {
+  async function run(scripts: ('fail' | 'closed' | 'drop' | string[])[], ms: number) {
     const log: { url: string; wrote: string }[] = [];
     const codes: string[] = [];
     const misses: number[] = [];
@@ -96,6 +106,19 @@ describe('PairSession', () => {
     // Tries at 0, 2, 6 s (2 s, then 4 s apart): few failed handshakes for Chrome to count.
     expect(r.log.length).toBe(4);
     expect(r.misses).toEqual([1, 2, 3, 0]);
+    expect(r.codes).toEqual(['ABCD-EFGH-JKLM']);
+  });
+
+  it('waits again when the phone lets it go without a code (not a miss)', async () => {
+    const r = await run(['closed', [PAIRED]], 3000);
+    expect(r.log.length).toBe(2);
+    expect(r.misses).toEqual([0, 0]);
+    expect(r.codes).toEqual(['ABCD-EFGH-JKLM']);
+  });
+
+  it('a connection that drops after the phone answered is not "can\'t reach"', async () => {
+    const r = await run(['drop', 'drop', [PAIRED]], 5000);
+    expect(r.misses).toEqual([0, 0, 0]);
     expect(r.codes).toEqual(['ABCD-EFGH-JKLM']);
   });
 });

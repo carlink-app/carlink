@@ -29,6 +29,12 @@ impl Events {
     fn count(&self, s: &str) -> usize {
         self.0.lock().unwrap().iter().filter(|e| *e == s).count()
     }
+
+    /// "paired" is reported once the code was sent: give the server a moment after the page read it.
+    fn paired_after_a_moment(&self) -> usize {
+        std::thread::sleep(Duration::from_millis(300));
+        self.count("paired")
+    }
 }
 
 fn start(port: u16) -> (server::Server, Arc<Events>) {
@@ -85,7 +91,7 @@ fn a_waiting_page_gets_the_code_once_the_phone_scans() {
     };
     let line = rt.block_on(wait_for_code(p, "/pair", SECRET, Duration::from_secs(3), scan)).unwrap().expect("code sent");
     assert_eq!(opened(&line, SECRET).as_deref(), Some(CODE));
-    assert_eq!(events.count("paired"), 1);
+    assert_eq!(events.paired_after_a_moment(), 1);
     assert_eq!(events.count("session true"), 0, "pairing is not a car session");
 }
 
@@ -97,7 +103,7 @@ fn a_page_arriving_after_the_scan_gets_it_too() {
     let rt = tokio::runtime::Runtime::new().unwrap();
     let line = rt.block_on(wait_for_code(p, "/pair", SECRET, Duration::from_secs(3), async {})).unwrap().expect("code sent");
     assert_eq!(opened(&line, SECRET).as_deref(), Some(CODE));
-    assert_eq!(events.count("paired"), 1);
+    assert_eq!(events.paired_after_a_moment(), 1);
 }
 
 #[test]
@@ -115,7 +121,7 @@ fn other_pages_and_second_takers_get_nothing() {
         let again = wait_for_code(p, "/pair", SECRET, Duration::from_millis(800), async {}).await.unwrap();
         assert_eq!(again, None);
     });
-    assert_eq!(events.count("paired"), 1);
+    assert_eq!(events.paired_after_a_moment(), 1);
 }
 
 #[test]
@@ -125,4 +131,55 @@ fn the_pairing_port_serves_nothing_else() {
     let rt = tokio::runtime::Runtime::new().unwrap();
     let r = rt.block_on(wait_for_code(p, "/carlink", SECRET, Duration::from_millis(800), async {}));
     assert!(r.is_err() || r.unwrap().is_none());
+}
+
+#[test]
+fn a_page_that_left_does_not_take_the_code() {
+    let p = port(4);
+    let (srv, events) = start(p);
+    let srv = Arc::new(srv);
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    rt.block_on(async {
+        // A page waits, then drops (reload, Wi-Fi blip) without the code.
+        let gone = wait_for_code(p, "/pair", SECRET, Duration::from_millis(300), async {}).await.unwrap();
+        assert_eq!(gone, None);
+    });
+    std::thread::sleep(Duration::from_millis(200));
+    let scan = {
+        let srv = srv.clone();
+        async move {
+            tokio::time::sleep(Duration::from_millis(300)).await;
+            srv.pair(SECRET, CODE);
+        }
+    };
+    // The same page again, under the same tag: it gets the code.
+    let line = rt.block_on(wait_for_code(p, "/pair", SECRET, Duration::from_secs(3), scan)).unwrap().expect("code sent to the live page");
+    assert_eq!(opened(&line, SECRET).as_deref(), Some(CODE));
+    assert_eq!(events.paired_after_a_moment(), 1);
+}
+
+#[test]
+fn one_address_holds_at_most_two_waiting_slots() {
+    let p = port(5);
+    let (_srv, _events) = start(p);
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    rt.block_on(async {
+        let hash = cert::make(pair::CERT_NAME, cert::now_unix()).hash;
+        let mut held = Vec::new();
+        for i in 0..3 {
+            let cfg = ClientConfig::builder().with_bind_default().with_server_certificate_hashes([Sha256Digest::new(hash)]).build();
+            let r = tokio::time::timeout(Duration::from_secs(2), async {
+                let conn = Endpoint::client(cfg)?.connect(format!("https://127.0.0.1:{}/pair", p + 1)).await?;
+                let (mut send, recv) = conn.open_bi().await?.await?;
+                send.write_all(format!("{{\"t\":\"pair\",\"tag\":\"{}\"}}\n", pair::tag(SECRET)).as_bytes()).await?;
+                anyhow::Ok((conn, send, recv))
+            })
+            .await;
+            let ok = matches!(r, Ok(Ok(_)));
+            assert_eq!(ok, i < 2, "slot {i}");
+            if let Ok(Ok(c)) = r {
+                held.push(c);
+            }
+        }
+    });
 }

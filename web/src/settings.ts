@@ -78,7 +78,8 @@ export function effective(fragment: string): Settings {
 
 export function validPort(v: unknown): number | null {
   const n = typeof v === 'number' ? v : typeof v === 'string' && v.trim() ? Number(v) : NaN;
-  return Number.isInteger(n) && n > 0 && n < 65536 ? n : null;
+  // Not 65535: the phone's pairing port is the next one.
+  return Number.isInteger(n) && n > 0 && n < 65535 ? n : null;
 }
 
 export function endpoint(s: Pick<Settings, 'host' | 'port'>): string {
@@ -89,6 +90,6 @@ export function endpoint(s: Pick<Settings, 'host' | 'port'>): string {
 /** Why [host]/[port] can't be used as the phone's address, or '' if they can. */
 export function addressError(host: string, port: string): string {
   if (!host.trim()) return 'Enter the phone address.';
-  if (!validPort(port)) return 'Port must be 1–65535.';
+  if (!validPort(port)) return 'Port must be 1–65534.';
   return '';
 }

@@ -70,6 +70,7 @@ class MainActivity : Activity() {
     private var pendingScan = false
     /** A linked secret waiting for TSLink to run (with [pendingScan]): pair with it instead of scanning. */
     private var pendingSecret: String? = null
+    private var linkDialog: AlertDialog? = null
     /** A status poll is out (UI thread only). */
     private var polling = false
 
@@ -112,7 +113,6 @@ class MainActivity : Activity() {
         // The pairing code is a credential: keep it out of the Recents thumbnail.
         if (Build.VERSION.SDK_INT >= 33) setRecentsScreenshotEnabled(false)
         if (Prefs.engineWanted(this)) askNotificationPermission() // engine already running: Start isn't tapped
-        if (savedInstanceState == null) pairFromLink(intent)
 
         codeView.text = Prefs.code(this)
         showCar()
@@ -128,6 +128,7 @@ class MainActivity : Activity() {
         showCar() // may have been chosen in setup
         showNotifications()
         render() // setup may have changed (Shizuku allowed, started, stopped)
+        pairFromLink()
         // Shizuku may have been allowed meanwhile (in Setup): link to the engine now.
         // Not after the user stopped it: binding would start the engine's process again.
         if (engine == null) { if (Prefs.engineWanted(this)) bindIfAllowed() } else call { it.status() }
@@ -168,6 +169,8 @@ class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
+        linkDialog?.dismiss() // shown again by the next screen while unanswered
+        linkDialog = null
         Shizuku.removeRequestPermissionResultListener(permissionListener)
         super.onDestroy()
     }
@@ -316,6 +319,7 @@ class MainActivity : Activity() {
      * to that car. TSLink off: start it first, the scanner opens once it runs.
      */
     private fun pairCar() {
+        pendingSecret = null // the user asked to scan: not a link from earlier
         if (engine == null || !engineRunning) {
             pendingScan = true
             startEngine()
@@ -337,17 +341,28 @@ class MainActivity : Activity() {
     /**
      * Opened from a pairing link (the phone's camera on the car's QR code).
      * Any web page can link here, with a secret its owner knows: ask before
-     * pairing, so only a QR code the user just scanned pairs a car.
+     * pairing, so only a QR code the user just scanned pairs a car. Shown
+     * again after a rotation until answered.
      */
-    private fun pairFromLink(intent: Intent?) {
-        val secret = intent?.getStringExtra(PairLinkActivity.EXTRA_SECRET) ?: return
-        intent.removeExtra(PairLinkActivity.EXTRA_SECRET) // not again on rotation or a later onResume
-        AlertDialog.Builder(this)
+    private fun pairFromLink() {
+        if (PairLinkActivity.pending == null || linkDialog?.isShowing == true) return
+        fun answer(pair: Boolean) {
+            val secret = PairLinkActivity.pending
+            PairLinkActivity.pending = null
+            if (pair && secret != null) pairWith(secret)
+        }
+        linkDialog = AlertDialog.Builder(this)
             .setTitle("Pair a car?")
-            .setMessage("Pair only if you just scanned the QR code on your car's screen.")
-            .setPositiveButton("Pair") { _, _ -> pairWith(secret) }
-            .setNegativeButton("Cancel", null)
+            .setMessage("Only if you just scanned the QR code on your own car's screen. The car you pair can show and control your phone's apps.")
+            .setPositiveButton("Pair") { _, _ -> answer(true) }
+            .setNegativeButton("Cancel") { _, _ -> answer(false) }
+            .setOnCancelListener { answer(false) }
             .show()
+            .apply {
+                // No taps through an overlay drawn over the dialog (tapjacking).
+                getButton(AlertDialog.BUTTON_POSITIVE)?.filterTouchesWhenObscured = true
+                getButton(AlertDialog.BUTTON_NEGATIVE)?.filterTouchesWhenObscured = true
+            }
     }
 
     /** Pair with [secret], starting TSLink first if it is off. */
@@ -361,7 +376,7 @@ class MainActivity : Activity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        pairFromLink(intent)
+        pairFromLink()
     }
 
     private fun openScanner() {

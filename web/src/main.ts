@@ -1112,8 +1112,15 @@ function startQrPairing() {
   // A live session stays (Pair again); retries with a code that doesn't work
   // stop meanwhile: failed handshakes would make Chrome throttle the page.
   if (lastStatus.s !== 'connected') conn.stop();
+  waitForScan(pairingSecret);
+}
+
+/** (Re)start waiting on the phone's pairing port at the current address. */
+function waitForScan(secret: string) {
+  stopPairSession();
+  if (DEMO) return; // no phone to wait for
   const { host, port } = effective(overrides); // saved address, or a dev override
-  pairSession = new PairSession({ host, port, secret: pairingSecret, onCode: onPaired, onUnanswered: showQrStatus });
+  pairSession = new PairSession({ host, port, secret, onCode: onPaired, onUnanswered: showQrStatus });
   pairSession.start();
 }
 
@@ -1212,8 +1219,15 @@ $('f-address-use').addEventListener('click', () => {
   const port = validPort(portText)!;
   save({ ...loadSaved(), host, port });
   settings = { ...settings, host, port };
-  if (!DEMO) conn.restart();
   toast(`Connecting to ${host}:${port}`);
+  // QR up: wait for the scan at the new address (a code that doesn't work
+  // yet would only fail handshakes there); otherwise reconnect with the code.
+  if (pairingSecret) {
+    showQrStatus(0);
+    waitForScan(pairingSecret);
+  } else if (!DEMO) {
+    conn.restart();
+  }
 });
 
 form.addEventListener('submit', (e) => {
