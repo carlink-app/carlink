@@ -136,6 +136,7 @@ export class PairSession {
         clearTimeout(timer);
       }
       connected();
+      console.info(`pairing: waiting on ${host}:${port + 1} (tag ${pairTag(secret).slice(0, 6)})`);
       const bidi = await wt.createBidirectionalStream();
       const writer = bidi.writable.getWriter();
       await writer.write(enc.encode(JSON.stringify({ t: 'pair', tag: pairTag(secret) }) + '\n'));

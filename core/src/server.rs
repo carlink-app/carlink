@@ -197,6 +197,8 @@ async fn handle_pair_session(
     .map_err(|_| anyhow::anyhow!("no pairing hello"))??;
 
     // Already scanned: take it now; else wait for the scan (or give up and let the page reconnect).
+    // The tag is one-way (it reveals nothing of the secret); a few characters tell pages apart in logs.
+    log::info!("pairing: page {remote} waiting (tag {})", &tag[..6]);
     let ready = pairing.lock().unwrap().take_offer(&tag);
     let message = match ready {
         Some(m) => {
@@ -551,6 +553,7 @@ impl Server {
         let message = paired_message(secret, code);
         let mut p = self.pairing.lock().unwrap();
         p.waiting.retain(|w| !w.tx.is_closed()); // pages that gave up
+        log::info!("pairing: scan for tag {} ({} page(s) waiting)", &tag[..6], p.waiting.len());
         if let Some(i) = p.waiting.iter().position(|w| w.tag == tag) {
             let w = p.waiting.remove(i);
             p.offer = None;
