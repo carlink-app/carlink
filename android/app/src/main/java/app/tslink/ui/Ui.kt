@@ -117,7 +117,12 @@ class Ui(private val ctx: Context) {
     fun segmented(labels: List<String>, onClick: (Int) -> Unit) = LinearLayout(ctx).apply {
         orientation = LinearLayout.HORIZONTAL
         labels.forEachIndexed { i, label ->
-            addView(baseButton(label) { onClick(i) }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f).apply {
+            // One line, shrinking the text if a label doesn't fit (large font settings).
+            val b = baseButton(label) { onClick(i) }.apply {
+                maxLines = 1
+                setAutoSizeTextTypeUniformWithConfiguration(11, 15, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
+            }
+            addView(b, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f).apply {
                 if (i > 0) marginStart = dp(8)
             })
         }

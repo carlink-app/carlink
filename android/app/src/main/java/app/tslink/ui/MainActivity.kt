@@ -257,7 +257,7 @@ class MainActivity : Activity() {
         card.addView(notifView)
         card.addView(ui.line("Message text in the car"), fullWidth(top = 12))
         val modes = Prefs.CarText.values()
-        carTextChoice = ui.segmented(listOf("Like lock screen", "Always", "Never")) { i ->
+        carTextChoice = ui.segmented(listOf("Lock screen", "Always", "Never")) { i ->
             Prefs.setCarText(this, modes[i])
             showNotifications()
         }
@@ -416,7 +416,7 @@ class MainActivity : Activity() {
         val mode = Prefs.carText(this)
         ui.selectSegment(carTextChoice, mode.ordinal)
         carTextView.text = when (mode) {
-            Prefs.CarText.LOCK_SCREEN -> "Shown when your lock screen shows it (Settings > Notifications > sensitive notifications)."
+            Prefs.CarText.LOCK_SCREEN -> "Like your lock screen: shown when it shows it (Settings > Notifications > sensitive notifications)."
             Prefs.CarText.ALWAYS -> "Always shown in the car, even when your lock screen hides it. Passengers can read it."
             Prefs.CarText.NEVER -> "Never shown in the car: only the app and the sender."
         }
