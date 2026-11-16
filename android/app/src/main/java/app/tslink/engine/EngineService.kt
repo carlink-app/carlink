@@ -38,7 +38,7 @@ class EngineService : IEngine.Stub() {
             this.code = code
             this.port = port
             allow = allowList(dev)
-            engine = Engine(code, port, allow).also { it.toApp = toApp() }
+            engine = retryWhileInUse { Engine(code, port, allow) }.also { it.toApp = toApp() }
             resyncApp()
             if (dev.isNotEmpty()) Log.w(TAG, "DEV: also accepting the car page from $dev")
             "running on :$port"
@@ -61,7 +61,13 @@ class EngineService : IEngine.Stub() {
         val s = pairingSecret(secret) ?: return "not a TSLink pairing code"
         current.stop(waitMs = 2_000)
         val gen = ++pairingGen
-        engine = Engine(s, port, allow, handover = code).also { e ->
+        engine = try {
+            retryWhileInUse { Engine(s, port, allow, handover = code) }
+        } catch (t: Throwable) {
+            Log.e(TAG, "pairing: engine start failed", t)
+            engine = runCatching { retryWhileInUse { Engine(code, port, allow) }.also { it.toApp = toApp() } }.getOrNull()
+            return "error: $t"
+        }.also { e ->
             e.toApp = toApp()
             // The car closes the session once it has the code: switch back right
             // then. A car that doesn't is switched after a moment for the message to leave.
@@ -84,8 +90,15 @@ class EngineService : IEngine.Stub() {
         pairingGen++
         val e = engine ?: return
         e.stop(waitMs = 2_000)
-        engine = Engine(code, port, allow).also { it.toApp = toApp() }
         if (pairing == "waiting") pairing = "expired"
+        // Runs on its own thread: a failure must not take the process down, and
+        // must leave "stopped" (the app shows Off, Pair starts it again).
+        engine = try {
+            retryWhileInUse { Engine(code, port, allow) }.also { it.toApp = toApp() }
+        } catch (t: Throwable) {
+            Log.e(TAG, "pairing: normal engine didn't come back", t)
+            null
+        }
         resyncApp()
         Log.i(TAG, "pairing: done, normal engine back")
     }
@@ -120,7 +133,8 @@ class EngineService : IEngine.Stub() {
         if (!fromTSLink()) return
         pairingGen++ // a pending pairing end must not restart a stopped engine
         pairing = ""
-        engine?.stop()
+        // Wait for the port to be free: a start right after (Unpair all cars) binds it again.
+        engine?.stop(waitMs = 2_000)
         engine = null
     }
 
@@ -203,3 +217,20 @@ class EngineService : IEngine.Stub() {
 
 /** [raw] as the engine's stand-in code while pairing (upper case), or null unless it is exactly a page secret. */
 internal fun pairingSecret(raw: String): String? = raw.uppercase().takeIf(app.tslink.ui.Pairing::isSecret)
+
+/**
+ * Run [bind] again while the port is still held ("Address already in use"):
+ * a just-stopped engine (pairing hand-back) or a dying old engine process
+ * releases it a moment later. Other errors, and the last try's, are thrown.
+ */
+internal fun <T> retryWhileInUse(tries: Int = 10, waitMs: Long = 200, sleep: (Long) -> Unit = Thread::sleep, bind: () -> T): T {
+    repeat(tries - 1) {
+        try {
+            return bind()
+        } catch (e: java.io.IOException) {
+            if (e.message?.contains("in use") != true) throw e
+            sleep(waitMs)
+        }
+    }
+    return bind()
+}
