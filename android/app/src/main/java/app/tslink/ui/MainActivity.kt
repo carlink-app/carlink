@@ -45,6 +45,7 @@ class MainActivity : Activity() {
         private const val PAIRING_POLLS = 130
         /** Pairing hands back to the normal engine when the car leaves (at most ~1.5 s), plus its stop. */
         private const val ENGINE_SWAP_MS = 2_500L
+        private const val STATUS_POLL_MS = 2_000L
         private const val REQ_SHIZUKU = 1
         private const val REQ_BLUETOOTH = 2
         private const val REQ_NOTIFICATIONS = 3
@@ -140,6 +141,24 @@ class MainActivity : Activity() {
             Shizuku.bindUserService(EngineArgs.args, connection)
         }
         return true
+    }
+
+    /** The engine doesn't push its state: while the screen is up, read it every couple of seconds (a car connecting). */
+    private val refresher = object : Runnable {
+        override fun run() {
+            if (engine != null) call { it.status() }
+            window.decorView.postDelayed(this, STATUS_POLL_MS)
+        }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        window.decorView.postDelayed(refresher, STATUS_POLL_MS)
+    }
+
+    override fun onStop() {
+        window.decorView.removeCallbacks(refresher)
+        super.onStop()
     }
 
     override fun onDestroy() {
@@ -397,8 +416,9 @@ class MainActivity : Activity() {
                 }
             }
             else -> {
+                // Polled every few seconds: only a change clears the note under the button.
+                if (st is EngineStatus.Running && st != lastStatus) showMessage(null)
                 lastStatus = st
-                if (st is EngineStatus.Running) showMessage(null)
                 if (st == EngineStatus.Stopped) pendingScan = false
             }
         }
