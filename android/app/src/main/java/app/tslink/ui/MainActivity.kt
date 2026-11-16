@@ -73,6 +73,8 @@ class MainActivity : Activity() {
     private var pendingScan = false
     /** Until then (uptime ms) pairing is swapping engines: no status polls. */
     private var pairingUntil = 0L
+    /** A status poll is out (UI thread only). */
+    private var polling = false
 
     private lateinit var carName: TextView
     private lateinit var carView: TextView
@@ -83,7 +85,6 @@ class MainActivity : Activity() {
     private lateinit var carTextView: TextView
     private lateinit var startStopButton: Button
     private lateinit var certView: TextView
-    private lateinit var diagView: TextView
     private var engine: IEngine? = null
     /** A bind is under way or done (cleared when the user stops the engine). */
     private var binding = false
@@ -134,7 +135,6 @@ class MainActivity : Activity() {
         if (engine == null) { if (Prefs.engineWanted(this)) bindIfAllowed() } else call { it.status() }
     }
 
-    private fun toast(s: String) = android.widget.Toast.makeText(this, s, android.widget.Toast.LENGTH_LONG).show()
 
     /** Bind the engine service if Shizuku runs and allows us; false if not. */
     private fun bindIfAllowed(): Boolean {
@@ -151,7 +151,10 @@ class MainActivity : Activity() {
         override fun run() {
             // Not while a Pair tap starts TSLink or pairing swaps engines: an in-between
             // "stopped" would drop the scan or flash Off/Disconnect (they refresh themselves).
-            if (engine != null && !pendingScan && SystemClock.uptimeMillis() > pairingUntil) call { it.status() }
+            if (engine != null && !pendingScan && !polling && SystemClock.uptimeMillis() > pairingUntil) {
+                polling = true // one at a time: a slow engine (hotspot restart) mustn't pile up threads
+                call(onResult = { polling = false; setStatus(it) }) { it.status() }
+            }
             render() // setup may change meanwhile (Shizuku stopped)
             window.decorView.postDelayed(this, STATUS_POLL_MS)
         }
@@ -237,8 +240,15 @@ class MainActivity : Activity() {
         Primary.DISCONNECT -> stopEngine()
     }
 
-    /** Pair needs Shizuku (installed, running, TSLink allowed); the other setup steps can wait. */
-    private fun setupReady() = Setup.pageReady(SetupPage.SHIZUKU, Setup.steps(setupFacts()))
+    /**
+     * Pair needs Shizuku running and TSLink allowed (the Shizuku setup page);
+     * the other setup steps can wait. Cheap: it runs on every redraw.
+     */
+    private fun setupReady() = Shizuku.pingBinder() && try {
+        Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
+    } catch (_: RuntimeException) {
+        false // Shizuku went away between the two
+    }
 
     private fun optionsCard(parent: LinearLayout) {
         val card = ui.card(parent, "Options")
@@ -287,8 +297,7 @@ class MainActivity : Activity() {
         more.addView(ui.button("Log", primary = false) { showLog() }, fullWidth(top = 8))
         certView = ui.line(size = 12f).apply { typeface = Typeface.MONOSPACE; visibility = View.GONE }
         more.addView(certView, fullWidth(top = 8))
-        diagView = ui.line("TSLink ${BuildConfig.VERSION_NAME}", size = 12f)
-        more.addView(diagView)
+        more.addView(ui.line("TSLink ${BuildConfig.VERSION_NAME}", size = 12f))
         Prefs.devAllow(this).takeIf { it.isNotEmpty() }?.let { dev ->
             more.addView(ui.line("DEV: car page also accepted from $dev (files/dev_allow)", size = 12f, color = Ui.WARN))
         }
@@ -542,7 +551,7 @@ class MainActivity : Activity() {
     /** Recent engine log (logcat as shell), to read or share after a car test. */
     private fun showLog() {
         val e = engine ?: run {
-            diagView.text = "Start TSLink first to see its log."
+            toast("Start TSLink first to see its log.")
             return
         }
         thread {

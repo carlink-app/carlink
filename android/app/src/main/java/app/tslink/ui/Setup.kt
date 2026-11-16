@@ -163,15 +163,6 @@ object Setup {
         ))
     }
 
-    /** "3 of 6 ready" over the required steps, plus the optional ones. */
-    fun summary(steps: List<SetupStep>): String {
-        val (optional, required) = steps.partition { it.optional }
-        fun ready(l: List<SetupStep>) = l.count { it.state == StepState.OK }
-        val head = if (ready(required) == required.size) "All set: ${required.size} of ${required.size} ready"
-        else "${ready(required)} of ${required.size} ready"
-        return if (optional.isEmpty()) head else "$head · optional ${ready(optional)} of ${optional.size}"
-    }
-
     fun page(id: StepId): SetupPage = when (id) {
         StepId.SHIZUKU_INSTALLED, StepId.SHIZUKU_RUNNING, StepId.SHIZUKU_ALLOWED -> SetupPage.SHIZUKU
         StepId.NOTIFICATION_PERMISSION, StepId.CAR_NOTIFICATIONS, StepId.CAR -> SetupPage.OPTIONAL
@@ -200,8 +191,6 @@ object Setup {
         page == SetupPage.PHONE && !ready -> "Skip for now"
         else -> "Next"
     }
-
-    fun allRequiredReady(steps: List<SetupStep>) = steps.filterNot { it.optional }.all { it.state == StepState.OK }
 
     /** The state line under a step's title. */
     fun stateLabel(step: SetupStep): String = when (step.state) {

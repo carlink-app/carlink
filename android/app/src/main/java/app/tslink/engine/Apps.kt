@@ -156,7 +156,7 @@ object Apps {
     val HIDDEN = setOf(
         APP_PACKAGE,
         "com.android.settings",
-        "moe.shizuku.privileged.api",
+        app.tslink.SHIZUKU_PACKAGE,
         "com.android.vending",
         "com.google.android.packageinstaller",
         "com.android.packageinstaller",

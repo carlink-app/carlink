@@ -20,8 +20,8 @@ import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
-import android.widget.Toast
 import app.tslink.Prefs
+import app.tslink.SHIZUKU_PACKAGE
 import app.tslink.notify.Listener
 import rikka.shizuku.Shizuku
 
@@ -59,10 +59,10 @@ class SetupActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        Prefs.setSetupSeen(this) // opens by itself once; later from Diagnostics
-        setContentView(buildScreen())
-        // Open where there's something to do (or where the user was before a rotation).
+        Prefs.setSetupSeen(this) // opens by itself once; later from More > Setup
         val steps = Setup.steps(setupFacts())
+        setContentView(buildScreen(steps))
+        // Open where there's something to do (or where the user was before a rotation).
         page = savedInstanceState?.getString("page")?.let(SetupPage::valueOf)
             ?: Setup.startPage(steps)
         Shizuku.addBinderReceivedListener(shizukuChanged)
@@ -89,7 +89,8 @@ class SetupActivity : Activity() {
 
     // ---- Layout -------------------------------------------------------------
 
-    private fun buildScreen(): View {
+    /** The cards for [steps] (which ones exist depends only on the phone's brand); [refresh] fills them. */
+    private fun buildScreen(steps: List<SetupStep>): View {
         val content = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         headerView = ui.text(13f, Ui.ACCENT, bold = true).apply { letterSpacing = 0.08f }
         content.addView(headerView)
@@ -97,7 +98,7 @@ class SetupActivity : Activity() {
         introView = ui.line().apply { setPadding(0, ui.dp(4), 0, ui.dp(16)) }
         content.addView(introView)
 
-        for (step in Setup.steps(setupFacts())) {
+        for (step in steps) {
             val card = ui.card(content, if (step.optional) "Optional" else "Needed")
             val dot = ui.dot()
             val title = ui.text(17f, bold = true)
@@ -272,7 +273,6 @@ class SetupActivity : Activity() {
         refresh()
     }
 
-    private fun toast(s: String) = Toast.makeText(this, s, Toast.LENGTH_LONG).show()
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)

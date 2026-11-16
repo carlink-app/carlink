@@ -8,10 +8,10 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.PowerManager
 import app.tslink.Prefs
+import app.tslink.SHIZUKU_PACKAGE
 import app.tslink.notify.Listener
 import rikka.shizuku.Shizuku
 
-const val SHIZUKU_PACKAGE = "moe.shizuku.privileged.api"
 
 /** What the phone says right now, for [Setup] (setup screen and the main screen's next action). */
 fun Context.setupFacts(): SetupFacts {

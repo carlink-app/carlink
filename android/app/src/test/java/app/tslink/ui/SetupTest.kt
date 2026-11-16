@@ -39,8 +39,7 @@ class SetupTest {
         assertEquals(StepState.ACTION, state(fresh, StepId.SHIZUKU_RUNNING))
         assertEquals(StepState.UNKNOWN, state(fresh, StepId.SHIZUKU_ALLOWED))
         assertEquals(StepState.UNKNOWN, state(fresh, StepId.HOTSPOT))
-        assertEquals("0 of 5 ready · optional 0 of 3", Setup.summary(s))
-        assertFalse(Setup.allRequiredReady(s))
+        assertEquals(SetupPage.SHIZUKU, Setup.startPage(s))
     }
 
     @Test fun stepOrderRequiredFirst() {
@@ -84,19 +83,19 @@ class SetupTest {
     @Test fun allReady() {
         val s = steps(ready)
         assertTrue(s.all { it.state == StepState.OK })
-        assertEquals("All set: 5 of 5 ready · optional 3 of 3", Setup.summary(s))
-        assertTrue(Setup.allRequiredReady(s))
+        assertTrue(SetupPage.entries.all { Setup.pageReady(it, s) })
     }
 
     @Test fun optionalStepsDontBlockReady() {
         val s = steps(ready.copy(notificationPermission = false, carNotifications = false, carChosen = false))
-        assertTrue(Setup.allRequiredReady(s))
-        assertEquals("All set: 5 of 5 ready · optional 0 of 3", Setup.summary(s))
+        assertTrue(SetupPage.entries.all { Setup.pageReady(it, s) })
     }
 
     @Test fun partlyReady() {
         val f = fresh.copy(shizukuInstalled = true, shizukuRunning = true, shizukuAllowed = false, batteryUnrestricted = true)
-        assertEquals("3 of 5 ready · optional 0 of 3", Setup.summary(steps(f)))
+        // Shizuku done, battery done, the hotspot tick missing: the Battery & hotspot page.
+        assertEquals(SetupPage.PHONE, Setup.startPage(steps(f.copy(shizukuAllowed = true))))
+        assertFalse(Setup.pageReady(SetupPage.SHIZUKU, steps(f)))
     }
 
     @Test fun tickedHotspot() {
@@ -115,7 +114,7 @@ class SetupTest {
         // Brand steps are required, ticked by the user.
         val xiaomi = steps(fresh.copy(brand = Brand.XIAOMI))
         assertTrue(xiaomi.filter { it.id in brandIds }.all { it.tickable && !it.optional && it.state == StepState.UNKNOWN })
-        assertEquals("0 of 7 ready · optional 0 of 3", Setup.summary(xiaomi))
+        assertFalse(Setup.pageReady(SetupPage.PHONE, steps(fresh.copy(brand = Brand.XIAOMI, batteryUnrestricted = true, ticked = setOf(StepId.HOTSPOT)))))
     }
 
     @Test fun brandDetection() {

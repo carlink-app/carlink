@@ -214,3 +214,6 @@ class Ui(private val ctx: Context) {
         return row to sw
     }
 }
+
+/** A long toast (setup and main screen notes that need no button). */
+fun Context.toast(s: String) = android.widget.Toast.makeText(this, s, android.widget.Toast.LENGTH_LONG).show()

@@ -5,6 +5,9 @@ import java.io.File
 import java.security.SecureRandom
 
 /** App settings shared by the UI and the car auto-start receiver. */
+/** Shizuku's package: setup checks for it, and the car never shows it. */
+const val SHIZUKU_PACKAGE = "moe.shizuku.privileged.api"
+
 object Prefs {
     const val PORT = 4433
     private const val FILE = "tslink"
