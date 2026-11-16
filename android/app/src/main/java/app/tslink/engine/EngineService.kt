@@ -19,7 +19,13 @@ class EngineService : IEngine.Stub() {
     private var pairingGen = 0
     /** Last pairing attempt for the app: "", "waiting", "paired <car address>", "expired". */
     @Volatile private var pairing = ""
-    private val appUid by lazy { Shell.context.packageManager.getPackageUid(APP_PACKAGE, 0) }
+    private val appUid = AppUid {
+        try {
+            Shell.context.packageManager.getPackageUid(APP_PACKAGE, 0)
+        } catch (_: android.content.pm.PackageManager.NameNotFoundException) {
+            -1 // uninstalled: nobody is TSLink
+        }
+    }
 
     @Synchronized
     override fun start(code: String, port: Int, libPath: String, devAllow: String): String {
@@ -173,7 +179,7 @@ class EngineService : IEngine.Stub() {
     }
 
     /** Only the tslink app may link (Shizuku gives this binder to it alone; belt and braces). */
-    private fun fromTSLink(): Boolean = Binder.getCallingUid() == appUid
+    private fun fromTSLink(): Boolean = appUid.isApp(Binder.getCallingUid())
 
     @Synchronized
     override fun setClient(c: IEngineClient?) {
@@ -239,4 +245,21 @@ internal fun <T> retryWhileInUse(tries: Int = 10, waitMs: Long = 200, sleep: (Lo
         }
     }
     return bind()
+}
+
+/**
+ * TSLink's uid, as callers are checked against it. Looked up again when a
+ * caller doesn't match: this process can outlive an uninstall + install
+ * (Shizuku keeps it), which gives the app a new uid; a cached one would
+ * deny the new app everything ("denied").
+ */
+internal class AppUid(private val lookup: () -> Int) {
+    @Volatile private var cached: Int? = null
+
+    fun isApp(caller: Int): Boolean {
+        if (caller == cached) return true
+        val now = lookup()
+        cached = now
+        return caller == now
+    }
 }
