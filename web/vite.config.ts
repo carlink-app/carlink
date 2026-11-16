@@ -63,7 +63,7 @@ self.addEventListener('fetch', (e) => {
  * placeholder, so source maps stay right. Dev and tests see the placeholder
  * (main.ts shows "dev").
  */
-const BUILD_PLACEHOLDER = '__TSLINK_BUILD_ID__';
+const BUILD_PLACEHOLDER = '__TSLINK__BUILD_ID__';
 
 function buildId(): Plugin {
   return {
