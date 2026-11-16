@@ -50,7 +50,7 @@ car's Bluetooth, as usual.
     - Maps / Waze / ABRP: tap, drag to pan, Back
     - Now playing: start music on the phone; the rail shows it; play/pause,
       next, previous from the card
-    - Long-press an app: Pin to rail; search and the A-Z letters in the launcher
+    - Long-press an app: Pin to rail; search in the launcher
     - the browser's expand button (bigger area; the UI size adapts)
     - leaving the screen untouched for 5+ min (the picture must stay live)
     - locking the phone for 2 min

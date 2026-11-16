@@ -272,7 +272,7 @@ svg { fill: currentColor; }
 .link { color: var(--accent); text-decoration: underline; font-size: inherit; }
 #f-advanced summary { font-size: 22px; color: var(--muted); cursor: pointer; padding: 8px 0; }
 #f-advanced .row { margin-top: 16px; }
-/* ---- launcher search: text field + A–Z strip ---- */
+/* ---- launcher search ---- */
 #launcher-bar { display: flex; flex-direction: column; gap: 16px; margin-bottom: 32px; }
 #launcher-bar[hidden] { display: none; }
 .search-box {
@@ -290,13 +290,6 @@ svg { fill: currentColor; }
 #search-clear[hidden] { display: none; }
 #search-clear svg { width: 36px; height: 36px; }
 #search-clear:active { background: #ffffff1a; }
-/* Only letters that have apps; big enough to hit without looking twice. */
-#letters { display: flex; flex-wrap: wrap; gap: 8px; }
-.letter {
-  min-width: 64px; height: 64px; padding: 0 8px; border-radius: 16px; background: #ffffff12; font-size: 28px; font-weight: 600;
-}
-.letter:active { background: #ffffff2a; }
-.letter.active { background: var(--accent); color: #000; }
 .no-match { color: var(--muted); font-size: 28px; text-align: center; margin-top: 64px; }
 
 /* ---- not connected: what to check ---- */

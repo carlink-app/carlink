@@ -14,7 +14,7 @@ import { drawQr, newSecret, pairedCode, qrModules, qrText } from './pairing';
 import { errorText, helpFor } from './help';
 import { attachLongPress } from './longpress';
 import { addPin, isPinned, MAX_PINS, parsePins, PINS_KEY, removePin, unpinnedRecents } from './pins';
-import { appsByLetter, filterApps, letters } from './search';
+import { filterApps } from './search';
 import { acceptIcons, applyCache, chunkByBytes, ICON_REQUEST_BYTES, loadIcons, MAX_CACHED, saveIcons, validIcon, type CachedIcon } from './iconcache';
 import {
   addBanner, addToTray, callsFirst, nextExpiry, pruneExpired, removeBanner, removeFromTray, sanitizeNotif, trayBadge, trayOthers, validId,
@@ -732,15 +732,13 @@ function setApps(list: AppInfo[]) {
   recents = refreshRecents(recents, apps);
   pins = refreshRecents(pins, apps);
   renderRecents();
-  renderLetters();
+  $('launcher-bar').hidden = apps.length === 0;
   renderGrid();
   updateLauncherMsg();
 }
 
-// Launcher search: a letter from the A–Z strip or typed text narrows the
-// grouped view to one flat, sorted list. Only one of the two at a time.
+// Launcher search: typed text narrows the grouped view to one flat, sorted list.
 let query = '';
-let letter = '';
 
 function appTile(a: AppInfo): HTMLButtonElement {
   const b = document.createElement('button');
@@ -766,14 +764,14 @@ function appSection(title: string, list: AppInfo[]): HTMLElement {
 }
 
 function renderGrid() {
-  const searching = !!(letter || query.trim());
+  const searching = !!query.trim();
   $('search-clear').hidden = !searching && !query;
   if (!searching) {
     $('grid').replaceChildren(...groupApps(apps).map((g) => appSection(g.title, g.apps)));
     return;
   }
-  const list = letter ? appsByLetter(apps, letter) : filterApps(apps, query);
-  const title = letter ? `Apps starting with ${letter === '#' ? 'a number or symbol' : letter}` : `Apps matching “${query.trim()}”`;
+  const list = filterApps(apps, query);
+  const title = `Apps matching “${query.trim()}”`;
   if (list.length) {
     $('grid').replaceChildren(appSection(title, list));
   } else {
@@ -784,35 +782,17 @@ function renderGrid() {
   }
 }
 
-function renderLetters() {
-  $('launcher-bar').hidden = apps.length === 0;
-  $('letters').replaceChildren(...letters(apps).map((l) => {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'letter' + (l === letter ? ' active' : '');
-    b.textContent = l;
-    b.setAttribute('aria-pressed', String(l === letter));
-    b.setAttribute('aria-label', l === '#' ? 'Numbers and symbols' : `Apps starting with ${l}`);
-    b.addEventListener('click', () => setFilter(l === letter ? '' : l, ''));
-    return b;
-  }));
-}
-
-function setFilter(nextLetter: string, nextQuery: string) {
+function setQuery(next: string) {
   const input = $<HTMLInputElement>('search');
-  const changed = nextLetter !== letter;
-  letter = nextLetter;
-  query = nextQuery;
+  query = next;
   if (input.value !== query) input.value = query;
-  if (letter) input.blur(); // put the on-screen keyboard away
-  if (changed) renderLetters();
   renderGrid();
   $('launcher').scrollTop = 0;
 }
 
-$('search').addEventListener('input', () => setFilter('', $<HTMLInputElement>('search').value));
+$('search').addEventListener('input', () => setQuery($<HTMLInputElement>('search').value));
 $('search').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('search').blur(); });
-$('search-clear').addEventListener('click', () => { setFilter('', ''); $('search').blur(); });
+$('search-clear').addEventListener('click', () => { setQuery(''); $('search').blur(); });
 
 // ---------- app actions (long press on a launcher tile or a rail app) ----------
 
@@ -978,7 +958,7 @@ function railApp(a: AppInfo, pinned: boolean): HTMLButtonElement {
 let launcherOn = false;
 function showLauncher(on: boolean) {
   if (on) { $('opening').hidden = true; showTray(false); }
-  else if (letter || query) setFilter('', ''); // the full launcher next time
+  else if (query) setQuery(''); // the full launcher next time
   if (on !== launcherOn) disarm(); // a close armed for the app in front no longer applies
   launcherOn = on;
   $('launcher').hidden = !on;

@@ -43,8 +43,8 @@ Rail and launcher: long-press (500 ms, holding still) an app tile, or an app
 on the rail, for Open / Pin to rail / Unpin. Up to 5 pinned apps stay at the
 top of the rail (`tslink.pins`), above the recents (which skip pinned apps);
 a dot under a pinned app means it's running. The launcher has a search field
-(label, case and accents ignored) and an A–Z strip of the letters that have
-apps; either one shows a flat, sorted list instead of the category groups.
+(label, case and accents ignored) that shows a flat, sorted list instead of
+the category groups.
 While the phone can't be reached, a help panel (after 2.5 s on a first
 connect, at once on an error) says what to check for that error, with
 Pairing and Retry now buttons.
@@ -119,7 +119,7 @@ the fake apps and banners.)
 | `src/touch.ts` | pointer events -> `touch` messages, ripple |
 | `src/h26x.ts` | Annex B parsing, codec string from SPS |
 | `src/pins.ts` | apps pinned to the rail: storage parsing, pin/unpin, recents without the pinned |
-| `src/search.ts` | launcher search: label filter, A–Z letter index |
+| `src/search.ts` | launcher search: label filter |
 | `src/longpress.ts` | long press on a tile/rail app (opens the pin sheet), swallowing the lift's click |
 | `src/help.ts` | connection help panel: error status -> what to check |
 | `src/notifs.ts` | notification banners: validation/truncation of `notif`, banner queue and expiry |
