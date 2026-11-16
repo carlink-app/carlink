@@ -32,4 +32,14 @@ class CallerTest {
         assertFalse(uids.isApp(2000))
         assertEquals("one lookup per stranger call at most", 3, lookups)
     }
+
+    @Test
+    fun goneOnceUninstalled() {
+        var installed = 10331
+        val uids = AppUid { installed }
+        assertFalse(uids.gone())
+        installed = -1 // the lookup's answer when the package isn't there
+        assertTrue(uids.gone())
+        assertFalse("nobody is TSLink when it's gone", uids.isApp(10331))
+    }
 }

@@ -27,6 +27,21 @@ class EngineService : IEngine.Stub() {
         }
     }
 
+    init {
+        // Shizuku keeps this process when TSLink is uninstalled: it would go on
+        // holding the car display, the port and the phone's power state with
+        // shell rights. Check now and then; once TSLink is gone, stop and exit.
+        Thread({
+            while (true) {
+                Thread.sleep(UNINSTALL_CHECK_MS)
+                if (appUid.gone()) {
+                    Log.i(TAG, "TSLink was uninstalled: stopping")
+                    destroy()
+                }
+            }
+        }, "uninstall-watch").apply { isDaemon = true }.start()
+    }
+
     @Synchronized
     override fun start(code: String, port: Int, libPath: String, devAllow: String): String {
         if (!fromTSLink()) return "denied"
@@ -222,6 +237,7 @@ class EngineService : IEngine.Stub() {
 
     private companion object {
         const val PAIRING_MS = 120_000L
+        const val UNINSTALL_CHECK_MS = 10_000L
         const val ROOT_ERROR = "error: Shizuku is running with root. TSLink needs it started without root: " +
             "stop Shizuku, then start it with Wireless debugging (or USB) instead of root."
     }
@@ -255,6 +271,9 @@ internal fun <T> retryWhileInUse(tries: Int = 10, waitMs: Long = 200, sleep: (Lo
  */
 internal class AppUid(private val lookup: () -> Int) {
     @Volatile private var cached: Int? = null
+
+    /** TSLink was uninstalled (the lookup finds no package). */
+    fun gone(): Boolean = lookup().also { cached = it } < 0
 
     fun isApp(caller: Int): Boolean {
         if (caller == cached) return true
