@@ -12,7 +12,7 @@ import { afterClose, groupApps, refreshRecents, resumeAction, withFront } from '
 import { accentFrom, textOn } from './theme';
 import { describe as describePhone, parsePhoneStatus } from './phonestatus';
 import { parseMedia, subtitle, type NowPlaying } from './media';
-import { drawQr, newSecret, pairedCode, qrModules, qrText } from './pairing';
+import { drawQr, newSecret, pairedCode, pairingView, qrModules, qrText } from './pairing';
 import { errorText, helpFor } from './help';
 import { attachLongPress } from './longpress';
 import { addPin, isPinned, MAX_PINS, parsePins, PINS_KEY, removePin, unpinnedRecents } from './pins';
@@ -1117,6 +1117,7 @@ function startQrPairing() {
   drawQr(canvas, qrModules(qrText(pairingSecret)), 300, devicePixelRatio || 1);
   $('pair-qr-status').textContent = 'Waiting for your phone…';
   $('pair-qr').hidden = false;
+  $('pair-done').hidden = true;
   $('pairing-form').hidden = true;
   // Connect with the secret; the phone accepts it once it has scanned the code.
   useCode(pairingSecret);
@@ -1158,10 +1159,13 @@ function onPaired(raw: unknown) {
 $('pair-manual').addEventListener('click', () => {
   stopQrPairing();
   $('pair-qr').hidden = true;
+  $('pair-done').hidden = true;
   $('pairing-form').hidden = false;
 });
 $('pair-scan').addEventListener('click', startQrPairing);
 $('pair-qr-cancel').addEventListener('click', () => { stopQrPairing(); showPairing(false); });
+$('pair-again').addEventListener('click', startQrPairing);
+$('pair-done-close').addEventListener('click', () => showPairing(false));
 
 const form = $<HTMLFormElement>('pairing-form');
 function showPairing(on: boolean) {
@@ -1179,8 +1183,15 @@ function showPairing(on: boolean) {
   $('f-error').textContent = '';
   $('f-cancel').hidden = !s.code && !DEMO;
   $('pair-qr-cancel').hidden = !s.code && !DEMO;
-  $('pair-qr').hidden = true;
-  $('pairing-form').hidden = false;
+  // One screen for the first visit and the gear: the QR code first, typing
+  // one tap away; a live paired session isn't dropped for a new QR code.
+  $('pairing-form').hidden = true;
+  if (pairingView(!!s.code, lastStatus.s === 'connected') === 'paired') {
+    $('pair-qr').hidden = true;
+    $('pair-done').hidden = false;
+  } else if (!pairingSecret) {
+    startQrPairing();
+  }
 }
 
 // Upper case and dashes while typing, so the code reads like the phone shows it.
@@ -1245,8 +1256,7 @@ if (DEMO) {
   void startDemo(forwardFrame, (msg) => showStatus({ s: 'error', text: msg }));
 } else if (!settings.code) {
   showStatus({ s: 'idle', text: 'Not paired' });
-  showPairing(true);
-  startQrPairing(); // first visit: pair with the QR code (typing stays one tap away)
+  showPairing(true); // first visit: the QR code (typing stays one tap away)
 } else {
   conn.start();
 }

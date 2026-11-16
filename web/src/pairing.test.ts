@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { drawQr, newSecret, pairedCode, QR_PREFIX, qrModules, qrText, SECRET_LENGTH } from './pairing';
+import { drawQr, newSecret, pairedCode, pairingView, QR_PREFIX, qrModules, qrText, SECRET_LENGTH } from './pairing';
 
 describe('pairing', () => {
   it('makes secrets from the code alphabet', () => {
@@ -75,5 +75,17 @@ describe('drawQr', () => {
     drawQr(canvas, Array.from({ length: 25 }, () => Array(25).fill(false)), 300, 1.5);
     expect(canvas.width).toBe(13 * 33); // floor(450/33)=13
     expect(parseFloat(canvas.style.width)).toBeLessThanOrEqual(300);
+  });
+});
+
+describe('pairingView', () => {
+  it('shows the QR code when there is no code yet', () => {
+    expect(pairingView(false, false)).toBe('qr');
+  });
+  it('shows the QR code when the saved code no longer connects (unpaired on the phone)', () => {
+    expect(pairingView(true, false)).toBe('qr');
+  });
+  it('keeps a live connection: paired view with Pair again', () => {
+    expect(pairingView(true, true)).toBe('paired');
   });
 });

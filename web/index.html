@@ -96,6 +96,15 @@
   </div>
 
   <div id="pairing" hidden>
+    <section id="pair-done" hidden aria-labelledby="pair-done-h">
+      <h1 id="pair-done-h">Pair with your phone</h1>
+      <p class="pair-status pair-ok">✓ Paired and connected</p>
+      <p>To pair this car again (for example after Unpair all cars on the phone), show a new QR code.</p>
+      <div class="row buttons">
+        <button type="button" id="pair-done-close" class="secondary">Close</button>
+        <button type="button" id="pair-again" class="primary">Pair again</button>
+      </div>
+    </section>
     <section id="pair-qr" hidden aria-labelledby="pair-qr-h">
       <h1 id="pair-qr-h">Pair with your phone</h1>
       <p>On your phone, open TSLink and tap <strong>Pair a car (scan QR)</strong>, then scan this code.</p>

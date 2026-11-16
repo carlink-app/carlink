@@ -46,3 +46,11 @@ export function drawQr(canvas: HTMLCanvasElement, modules: boolean[][], cssSize:
   g.fillStyle = '#000';
   modules.forEach((row, r) => row.forEach((dark, c) => { if (dark) g.fillRect((c + 4) * px, (r + 4) * px, px, px); }));
 }
+
+/**
+ * What the pairing screen (first visit and the gear) opens with: the QR code,
+ * unless a paired session is live (a QR would replace it: "Pair again" instead).
+ */
+export function pairingView(hasCode: boolean, connected: boolean): 'qr' | 'paired' {
+  return hasCode && connected ? 'paired' : 'qr';
+}
