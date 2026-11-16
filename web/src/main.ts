@@ -22,7 +22,7 @@ import {
   addBanner, addToTray, callsFirst, nextExpiry, pruneExpired, removeBanner, removeFromTray, sanitizeNotif, trayBadge, trayOthers, validId,
   type Banner, type Notif,
 } from './notifs';
-import { capPane, effective, loadSaved, paneDpi, sameEndpoint, save, saveDisplay, uiScale, validPort, type Settings } from './settings';
+import { capPane, effective, loadSaved, paneDpi, sameEndpoint, save, uiScale, validPort, type Settings } from './settings';
 import { Samples } from './stats';
 import { attachTouch } from './touch';
 
@@ -507,7 +507,7 @@ function dismissButton(id: string): HTMLButtonElement {
   return close;
 }
 /** What each banner element currently shows, to skip refilling unchanged ones. */
-const filled = new WeakMap<HTMLElement, { n: Notif; showText: boolean }>();
+const filled = new WeakMap<HTMLElement, Notif>();
 /** When each banner last appeared or changed: taps right after that were meant for what was below. */
 const shownAt = new WeakMap<HTMLElement, number>();
 const TAP_GUARD_MS = 400;
@@ -539,8 +539,8 @@ function bannerEl(id: string): HTMLElement {
 /** Fill a banner from (sanitized) phone data: textContent only. */
 function fillBanner(el: HTMLElement, n: Notif) {
   const f = filled.get(el);
-  if (f && f.n === n && f.showText === settings.showText) return;
-  filled.set(el, { n, showText: settings.showText });
+  if (f === n) return;
+  filled.set(el, n);
   shownAt.set(el, performance.now());
   el.className = `notif ${n.kind}`;
   const body = el.firstElementChild as HTMLElement;
@@ -559,7 +559,7 @@ function notifTexts(n: Notif): HTMLElement {
     return d;
   };
   texts.append(line('notif-app', n.app), line('notif-title', n.title));
-  if (settings.showText) texts.append(line('notif-text', n.text));
+  if (n.text) texts.append(line('notif-text', n.text)); // the phone decides (TSLink > Notifications)
   return texts;
 }
 
@@ -1154,7 +1154,6 @@ function showPairing(on: boolean) {
   $('pair-qr-cancel').hidden = !s.code && !DEMO;
   $('pair-qr').hidden = true;
   $('pairing-form').hidden = false;
-  renderDisplay();
 }
 
 // Upper case and dashes while typing, so the code reads like the phone shows it.
@@ -1186,13 +1185,10 @@ form.addEventListener('submit', (e) => {
   if (reconnect && !DEMO) conn.restart();
 });
 
-// Display settings apply (and are saved) on tap, without the pairing form.
-function renderDisplay() {
-  $('f-showtext').setAttribute('aria-checked', String(settings.showText));
-}
 // Full screen, where the browser allows it (the Tesla browser's support is
-// untested). The pane re-measures on resize and the phone follows.
-$('fullscreen-row').hidden = !document.fullscreenEnabled;
+// untested; no section at all without it). The pane re-measures on resize and
+// the phone follows. Message text is the phone's setting (TSLink > Notifications).
+$('display').hidden = !document.fullscreenEnabled;
 const syncFullscreen = () => { $('f-fullscreen').textContent = document.fullscreenElement ? 'Exit full screen' : 'Full screen'; };
 document.addEventListener('fullscreenchange', syncFullscreen);
 $('f-fullscreen').addEventListener('click', () => {
@@ -1200,12 +1196,6 @@ $('f-fullscreen').addEventListener('click', () => {
   p.catch((e: unknown) => toast(`Full screen not available: ${e instanceof Error ? e.message : String(e)}`));
 });
 
-$('f-showtext').addEventListener('click', () => {
-  settings = { ...settings, showText: !settings.showText };
-  saveDisplay(settings);
-  renderDisplay();
-  renderBanners();
-});
 $('f-cancel').addEventListener('click', () => { stopQrPairing(); showPairing(false); });
 $('btn-settings').addEventListener('click', () => showPairing(true));
 

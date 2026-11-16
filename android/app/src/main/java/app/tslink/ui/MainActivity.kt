@@ -68,6 +68,8 @@ class MainActivity : Activity() {
     private lateinit var carButton: Button
     private lateinit var notifView: TextView
     private lateinit var notifSwitch: Switch
+    private lateinit var carTextChoice: LinearLayout
+    private lateinit var carTextView: TextView
     private lateinit var diagView: TextView
     private var engine: IEngine? = null
 
@@ -253,6 +255,15 @@ class MainActivity : Activity() {
         card.addView(row)
         notifView = ui.line()
         card.addView(notifView)
+        card.addView(ui.line("Message text in the car"), fullWidth(top = 12))
+        val modes = Prefs.CarText.values()
+        carTextChoice = ui.segmented(listOf("Like lock screen", "Always", "Never")) { i ->
+            Prefs.setCarText(this, modes[i])
+            showNotifications()
+        }
+        card.addView(carTextChoice, fullWidth(top = 4))
+        carTextView = ui.line()
+        card.addView(carTextView)
     }
 
     private fun diagnosticsCard(parent: LinearLayout) {
@@ -401,7 +412,14 @@ class MainActivity : Activity() {
 
     private fun showNotifications() {
         notifSwitch.isChecked = notificationsOn()
-        notifView.text = "New notifications appear as banners in the car. What your lock screen hides stays hidden."
+        notifView.text = "New notifications appear as banners in the car: app, sender and (see below) the message."
+        val mode = Prefs.carText(this)
+        ui.selectSegment(carTextChoice, mode.ordinal)
+        carTextView.text = when (mode) {
+            Prefs.CarText.LOCK_SCREEN -> "Shown when your lock screen shows it (Settings > Notifications > sensitive notifications)."
+            Prefs.CarText.ALWAYS -> "Always shown in the car, even when your lock screen hides it. Passengers can read it."
+            Prefs.CarText.NEVER -> "Never shown in the car: only the app and the sender."
+        }
     }
 
     /**

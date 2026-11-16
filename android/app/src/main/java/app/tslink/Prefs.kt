@@ -44,6 +44,19 @@ object Prefs {
     fun setAutoStarted(ctx: Context, on: Boolean) = prefs(ctx).edit().putBoolean("auto_started", on).apply()
 
     /** The setup wizard was shown once (it opens by itself on first launch only). */
+    /** Message text of notifications in the car: like the lock screen (default), always, or never. */
+    enum class CarText { LOCK_SCREEN, ALWAYS, NEVER }
+
+    const val CAR_TEXT_KEY = "car_text"
+
+    fun carText(ctx: Context): CarText =
+        runCatching { CarText.valueOf(prefs(ctx).getString(CAR_TEXT_KEY, null) ?: "") }.getOrDefault(CarText.LOCK_SCREEN)
+
+    fun setCarText(ctx: Context, v: CarText) = prefs(ctx).edit().putString(CAR_TEXT_KEY, v.name).apply()
+
+    /** For listening to changes (the notification listener re-sends on a change). */
+    fun shared(ctx: Context): android.content.SharedPreferences = prefs(ctx)
+
     fun setupSeen(ctx: Context): Boolean = prefs(ctx).getBoolean("setup_seen", false)
     fun setSetupSeen(ctx: Context) = prefs(ctx).edit().putBoolean("setup_seen", true).apply()
 

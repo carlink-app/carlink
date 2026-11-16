@@ -7,6 +7,7 @@ import android.os.Build
 import android.provider.Settings
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
+import app.tslink.Prefs
 import app.tslink.engine.pngDataUrl
 import org.json.JSONArray
 import org.json.JSONObject
@@ -45,9 +46,16 @@ class Listener : NotificationListenerService() {
     override fun onListenerConnected() {
         link = EngineLink(this, onConnected = ::sendAll, onMessage = ::fromEngine)
         media = MediaWatch(this, ComponentName(this, Listener::class.java), ::appLabel) { link?.send(it) }.also { it.watch() }
+        Prefs.shared(this).registerOnSharedPreferenceChangeListener(carTextChanged)
+    }
+
+    /** The car text setting changed: send what's on the phone again with the new rule. */
+    private val carTextChanged = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+        if (key == Prefs.CAR_TEXT_KEY) resync()
     }
 
     override fun onListenerDisconnected() {
+        Prefs.shared(this).unregisterOnSharedPreferenceChangeListener(carTextChanged)
         // Access turned off: the car must not keep showing what it had.
         link?.send(JSONObject().put("t", "notif-reset"))
         link?.send(JSONObject().put("t", "media").put("none", true))
@@ -72,7 +80,13 @@ class Listener : NotificationListenerService() {
         val ranking = Ranking().takeIf { rankingMap.getRanking(sbn.key, it) }
         val id = idFor(sbn.key)
         val override = if (Build.VERSION.SDK_INT >= 31) ranking?.lockscreenVisibilityOverride else null
-        val info = NotifInfo.of(sbn, packageName, ranking?.importance, override, sensitiveOnLockscreen(), !notificationsOnLockscreen())
+        val mode = Prefs.carText(this)
+        val info = NotifInfo.of(
+            sbn, packageName, ranking?.importance, override,
+            // Always: private content shows; like the lock screen: its settings decide.
+            allowPrivate = mode == Prefs.CarText.ALWAYS || sensitiveOnLockscreen(),
+            hideContent = mode != Prefs.CarText.ALWAYS && !notificationsOnLockscreen(),
+        )?.let { if (mode == Prefs.CarText.NEVER) it.withoutText() else it }
         if (info == null) {
             // An update can turn a shown notification into one we don't show (silent, ongoing).
             forget(id)
@@ -171,6 +185,9 @@ class Listener : NotificationListenerService() {
 
 /** What the car shows for a notification; pure, so it's unit-testable. */
 data class NotifInfo(val title: String, val text: String, val kind: String) {
+    /** "Never" in the car: who it's from stays, the message doesn't. */
+    fun withoutText() = copy(text = "")
+
     companion object {
         /** Importance below this is silent/minimized: not worth the driver's eyes. */
         private const val MIN_IMPORTANCE = 3 // NotificationManager.IMPORTANCE_DEFAULT

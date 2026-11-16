@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_HOST, DEFAULT_PORT } from './protocol';
-import { DEFAULT_DISPLAY, effective, endpoint, loadSaved, paneDpi, sameEndpoint, save, saveDisplay, uiScale, validPort, type Display, type Settings, capPane, MAX_PANE_PIXELS } from './settings';
+import { effective, endpoint, loadSaved, paneDpi, sameEndpoint, save, uiScale, validPort, type Settings, capPane, MAX_PANE_PIXELS } from './settings';
 
 function memoryStorage(): Storage {
   const m = new Map<string, string>();
@@ -37,16 +37,15 @@ describe('saved settings and fragment overrides', () => {
   beforeEach(() => { vi.stubGlobal('localStorage', memoryStorage()); });
   afterEach(() => { vi.unstubAllGlobals(); });
 
-  const d = DEFAULT_DISPLAY;
-  const defaults: Settings = { code: '', host: DEFAULT_HOST, port: DEFAULT_PORT, ...d };
-  const saved: Settings = { code: 'SAVED', host: '10.0.0.2', port: 5000, ...d };
+  const defaults: Settings = { code: '', host: DEFAULT_HOST, port: DEFAULT_PORT };
+  const saved: Settings = { code: 'SAVED', host: '10.0.0.2', port: 5000 };
 
   it('defaults when nothing is saved', () => {
     expect(loadSaved()).toEqual(defaults);
   });
   it('round-trips through save', () => {
-    save({ code: 'ABCD-EFGH-JKLM', host: '10.0.0.2', port: 5000, showText: false });
-    expect(loadSaved()).toEqual({ code: 'ABCD-EFGH-JKLM', host: '10.0.0.2', port: 5000, showText: false });
+    save({ code: 'ABCD-EFGH-JKLM', host: '10.0.0.2', port: 5000 });
+    expect(loadSaved()).toEqual({ code: 'ABCD-EFGH-JKLM', host: '10.0.0.2', port: 5000 });
   });
   it('falls back per field on corrupt or wrongly typed storage', () => {
     localStorage.setItem('tslink.settings', '{not json');
@@ -54,13 +53,14 @@ describe('saved settings and fragment overrides', () => {
     localStorage.setItem('tslink.settings', JSON.stringify({ code: 7, host: '', port: 99999 }));
     expect(loadSaved()).toEqual(defaults);
     localStorage.setItem('tslink.settings', JSON.stringify({ code: 'X', host: 'h', port: '4434' }));
-    expect(loadSaved()).toEqual({ code: 'X', host: 'h', port: 4434, ...d });
-    localStorage.setItem('tslink.settings', JSON.stringify({ code: 'X', showText: 'no' }));
+    expect(loadSaved()).toEqual({ code: 'X', host: 'h', port: 4434 });
+    // An old car-page display setting (message text moved to the phone) is ignored.
+    localStorage.setItem('tslink.settings', JSON.stringify({ code: 'X', showText: false }));
     expect(loadSaved()).toEqual({ ...defaults, code: 'X' });
   });
   it('fragment overrides win but are not saved', () => {
     save({ ...saved });
-    expect(effective('#code=DEV&host=127.0.0.1&port=4500')).toEqual({ code: 'DEV', host: '127.0.0.1', port: 4500, showText: true });
+    expect(effective('#code=DEV&host=127.0.0.1&port=4500')).toEqual({ code: 'DEV', host: '127.0.0.1', port: 4500 });
     expect(loadSaved()).toEqual({ ...saved });
   });
   it('ignores missing or invalid overrides', () => {
@@ -70,40 +70,19 @@ describe('saved settings and fragment overrides', () => {
     // An explicit empty code is an override (unpair for this load).
     expect(effective('#code=')).toEqual({ ...saved, code: '' });
   });
-  it('keeps settings saved before display settings existed (milestone 2 format)', () => {
+  it('keeps settings in the milestone 2 format', () => {
     localStorage.setItem('tslink.settings', JSON.stringify({ code: 'OLD', host: '10.0.0.3', port: 4433 }));
-    expect(loadSaved()).toEqual({ code: 'OLD', host: '10.0.0.3', port: 4433, showText: true });
-  });
-  it('saves display settings without touching the pairing or persisting overrides', () => {
-    save(saved);
-    effective('#code=DEV&host=127.0.0.1'); // in effect, but must not leak into storage
-    saveDisplay({ showText: false });
-    expect(loadSaved()).toEqual({ ...saved, showText: false });
+    expect(loadSaved()).toEqual({ code: 'OLD', host: '10.0.0.3', port: 4433 });
   });
   it('save persists only known fields', () => {
     save({ ...saved, extra: 'x' } as Settings);
     expect(JSON.parse(localStorage.getItem('tslink.settings')!)).toEqual(saved);
   });
-  it('display changes are not an endpoint change', () => {
-    expect(sameEndpoint(saved, { ...saved, showText: false })).toBe(true);
+  it('endpoint changes', () => {
+    expect(sameEndpoint(saved, { ...saved })).toBe(true);
     expect(sameEndpoint(saved, { ...saved, code: 'OTHER' })).toBe(false);
     expect(sameEndpoint(saved, { ...saved, host: 'h' })).toBe(false);
     expect(sameEndpoint(saved, { ...saved, port: 1 })).toBe(false);
-  });
-});
-
-
-describe('display settings edge cases', () => {
-  beforeEach(() => { vi.stubGlobal('localStorage', memoryStorage()); });
-  afterEach(() => { vi.unstubAllGlobals(); });
-
-  it('saveDisplay with nothing saved keeps the default pairing', () => {
-    saveDisplay({ showText: false });
-    expect(loadSaved()).toEqual({ code: '', host: DEFAULT_HOST, port: DEFAULT_PORT, showText: false });
-  });
-  it('saveDisplay ignores extra fields on its argument', () => {
-    saveDisplay({ showText: true, code: 'LEAK', host: 'x' } as unknown as Display);
-    expect(loadSaved()).toEqual({ code: '', host: DEFAULT_HOST, port: DEFAULT_PORT, showText: true });
   });
 });
 

@@ -1,13 +1,6 @@
 import { DEFAULT_HOST, DEFAULT_PORT, DPI_MAX, DPI_MIN, PANE_DPI } from './protocol';
 
-export interface Display {
-  /** Notification banners show the message text (off: app + title only). */
-  showText: boolean;
-}
-
-export interface Settings extends Display { code: string; host: string; port: number }
-
-export const DEFAULT_DISPLAY: Display = { showText: true };
+export interface Settings { code: string; host: string; port: number }
 
 /** Shortest side of the phone's display in dp: just above the 600 dp where apps switch to phone layouts. */
 const TARGET_SW_DP = 640;
@@ -58,19 +51,12 @@ export function loadSaved(): Settings {
     code: typeof s.code === 'string' ? s.code : '',
     host: typeof s.host === 'string' && s.host ? s.host : DEFAULT_HOST,
     port: validPort(s.port) ?? DEFAULT_PORT,
-    // Added in milestone 3: older saved settings lack it.
-    showText: typeof s.showText === 'boolean' ? s.showText : DEFAULT_DISPLAY.showText,
   };
 }
 
 export function save(s: Settings): void {
-  const { code, host, port, showText } = s; // nothing else gets persisted
-  localStorage.setItem(KEY, JSON.stringify({ code, host, port, showText }));
-}
-
-/** Save display settings only, keeping the saved pairing (not any dev override in effect). */
-export function saveDisplay(d: Display): void {
-  save({ ...loadSaved(), showText: d.showText });
+  const { code, host, port } = s; // nothing else gets persisted
+  localStorage.setItem(KEY, JSON.stringify({ code, host, port }));
 }
 
 /** Whether a change of settings needs a new session (display settings don't). */
