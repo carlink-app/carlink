@@ -23,7 +23,7 @@ car's Bluetooth, as usual.
 5. **TSLink:**
    - Start engine, then allow Shizuku. Status shows `running on :4433`, later
      `waiting for car · cert abc123`.
-   - Write down the pairing code.
+   - Setup & checks (Diagnostics) should show every required step ready.
    - Turn car notifications on (optional; this also gives the car real app icons).
    - Choose car: only if you want Bluetooth auto-start (untested so far).
    - Battery: Unrestricted (Settings -> Apps -> TSLink -> Battery).
@@ -31,8 +31,8 @@ car's Bluetooth, as usual.
    off or walk out of range for 2 minutes. Shizuku must still say running, and
    "Start engine" must answer "already running". If Shizuku died, fix that first:
    in the car you can't restart it without Wi-Fi.
-7. Optional: open the car page once in the car on home Wi-Fi and save the code.
-   This caches the page; it won't connect yet.
+7. Optional: open the car page once in the car on home Wi-Fi. This caches the
+   page; it won't connect yet.
 
 ## In the car
 
@@ -40,12 +40,17 @@ car's Bluetooth, as usual.
    Don't use the system hotspot toggle: that one uses a private subnet the car
    browser refuses.
 9. Tesla Wi-Fi: join the phone's hotspot (not home Wi-Fi). The car's IP should be 9.9.0.2.
-10. Tesla browser: `https://tslink.app/?debug=1`. Enter the code;
-    host 9.9.0.1 and port 4433 are filled in. Save & connect.
+10. Tesla browser: `https://tslink.app/?debug=1`. The page shows a QR code.
+    In TSLink tap "Pair a car (scan QR)" and scan it; the page says "Paired"
+    and connects within a few seconds. Backup: "Type the code instead" and
+    enter the code from the phone (the address 9.9.0.1:4433 is preset).
 11. Expect "Connected to Pixel 9 Pro" and the app grid. In the overlay, the
     `cert ... fp` should match the `cert` in the phone's status.
 12. Try each of these and note the overlay numbers (codec, fps, decode, rtt, rate):
     - Maps / Waze / ABRP: tap, drag to pan, Back
+    - Now playing: start music on the phone; the rail shows it; play/pause,
+      next, previous from the card
+    - Long-press an app: Pin to rail; search and the A-Z letters in the launcher
     - the browser's expand button (bigger area; the UI size adapts)
     - leaving the screen untouched for 5+ min (the picture must stay live)
     - locking the phone for 2 min
