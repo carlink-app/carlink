@@ -36,6 +36,23 @@
             </intent-filter>
         </activity>
 
+        <!-- The car's pairing QR code is a link: the phone's camera opens TSLink with it.
+             Verified against https://tslink.app/.well-known/assetlinks.json. -->
+        <activity
+            android:name=".ui.PairLinkActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.NoDisplay">
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="tslink.app" android:path="/pair" />
+                <data android:path="/pair/" />
+            </intent-filter>
+        </activity>
+
         <activity
             android:name=".ui.SetupActivity"
             android:exported="false"

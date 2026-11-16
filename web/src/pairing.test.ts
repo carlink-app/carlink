@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { drawQr, newSecret, pairedCode, pairingPace, qrStatusText, pairingView, QR_PREFIX, qrModules, qrText, SECRET_LENGTH } from './pairing';
+import { drawQr, newSecret, pairedCode, pairingPace, qrStatusText, pairingView, PAIR_LINK, qrModules, qrText, SECRET_LENGTH } from './pairing';
 
 describe('pairing', () => {
   it('makes secrets from the code alphabet', () => {
@@ -9,7 +9,9 @@ describe('pairing', () => {
     expect(newSecret((a) => a.fill(0))).toBe('A'.repeat(SECRET_LENGTH));
   });
   it('QR text is what the phone expects', () => {
-    expect(qrText('ABC')).toBe(`${QR_PREFIX}ABC`);
+    // A link, so the phone's camera can open TSLink; the secret after # never reaches a server.
+    expect(qrText('ABC')).toBe('https://tslink.app/pair#ABC');
+    expect(PAIR_LINK).toBe('https://tslink.app/pair#');
     const m = qrModules(qrText(newSecret()));
     expect(m.length).toBeGreaterThanOrEqual(21);
     expect(m.every((row) => row.length === m.length)).toBe(true);

@@ -1,18 +1,41 @@
 package app.tslink.ui
 
 import app.tslink.Prefs
+import java.net.URI
 
-/** The car page's pairing QR code: `TSLINK-PAIR:<one-time secret>` (web/src/pairing.ts). */
+/**
+ * The car page's pairing QR code (web/src/pairing.ts): the link
+ * `https://tslink.app/pair#<one-time secret>`, so the phone's own camera
+ * opens TSLink too (App Link). Older pages show `TSLINK-PAIR:<secret>`.
+ */
 object Pairing {
     const val PREFIX = "TSLINK-PAIR:"
     const val SECRET_LENGTH = 20
+    private const val HOST = "tslink.app"
+    private val PATHS = setOf("/pair", "/pair/")
 
     /** Exactly what the page makes: 20 characters from the alphabet (upper case). */
     fun isSecret(s: String): Boolean = s.length == SECRET_LENGTH && s.all { it in Prefs.ALPHABET }
 
-    /** The secret from a scanned QR code, or null if it isn't a TSLink pairing code. */
+    /** The secret from a scanned QR code or an opened link, or null if it isn't a TSLink pairing code. */
     fun secretFrom(raw: String?): String? {
-        if (raw == null || !raw.startsWith(PREFIX, ignoreCase = true)) return null
-        return raw.substring(PREFIX.length).trim().uppercase().takeIf(::isSecret)
+        if (raw == null) return null
+        val text = raw.trim()
+        val secret = if (text.startsWith(PREFIX, ignoreCase = true)) text.substring(PREFIX.length) else fromLink(text)
+        return secret?.trim()?.uppercase()?.takeIf(::isSecret)
+    }
+
+    /** Only https://tslink.app/pair with the secret after # (never sent to a server); nothing else. */
+    private fun fromLink(text: String): String? {
+        val uri = try {
+            URI(text)
+        } catch (_: java.net.URISyntaxException) {
+            return null
+        }
+        val ok = uri.scheme.equals("https", ignoreCase = true) &&
+            uri.host.equals(HOST, ignoreCase = true) &&
+            uri.rawUserInfo == null && uri.port == -1 && uri.rawQuery == null &&
+            uri.rawPath in PATHS
+        return if (ok) uri.rawFragment else null
     }
 }

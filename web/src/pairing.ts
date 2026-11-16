@@ -8,14 +8,19 @@ import { CODE_LENGTH, groupCode, normalizeCode } from './cert';
 /** Same alphabet as the phone's pairing codes (no 0/O, 1/I). */
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 export const SECRET_LENGTH = 20; // 100 bits
-export const QR_PREFIX = 'TSLINK-PAIR:';
+/**
+ * The QR code is a link, so the phone's own camera opens TSLink (Android App
+ * Link, web/public/.well-known/assetlinks.json); the in-app scanner reads it
+ * too. The secret goes after #: browsers never send that part to a server.
+ */
+export const PAIR_LINK = 'https://tslink.app/pair#';
 
 export function newSecret(random: (a: Uint8Array<ArrayBuffer>) => Uint8Array = (a) => crypto.getRandomValues(a)): string {
   const bytes = random(new Uint8Array(SECRET_LENGTH));
   return Array.from(bytes, (b) => ALPHABET[b % ALPHABET.length]).join(''); // 256 % 32 == 0: unbiased
 }
 
-export const qrText = (secret: string) => QR_PREFIX + secret;
+export const qrText = (secret: string) => PAIR_LINK + secret;
 
 /** A pairing code from the phone's `paired` message, normalized; null if malformed. */
 export function pairedCode(v: unknown): string | null {

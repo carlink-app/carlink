@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "app.tslink",
+      "sha256_cert_fingerprints": [
+        "50:89:FA:00:28:63:DF:F2:70:FE:B8:85:FE:8A:94:94:74:BA:49:D4:C6:9A:00:3D:DF:F0:42:AF:CE:10:B1:4D"
+      ]
+    }
+  }
+]

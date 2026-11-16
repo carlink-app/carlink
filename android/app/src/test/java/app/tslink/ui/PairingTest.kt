@@ -32,4 +32,22 @@ class PairingTest {
         assertNull(Pairing.secretFrom("TSLINK-PAIR:ÄBCDEFGHJKLMNPQRSTUV"))
         assertNull(Pairing.secretFrom("TSLINK-PAIR:ABCDEFGH JKLMNPQRSTUV"))
     }
+
+    @Test fun readsTheLink() {
+        // The QR code is a link, so the phone's own camera can open TSLink too.
+        assertEquals("ABCDEFGHJKLMNPQRSTUV", Pairing.secretFrom("https://tslink.app/pair#ABCDEFGHJKLMNPQRSTUV"))
+        assertEquals("ABCDEFGHJKLMNPQRSTUV", Pairing.secretFrom("https://tslink.app/pair/#abcdefghjklmnpqrstuv"))
+        assertEquals("ABCDEFGHJKLMNPQRSTUV", Pairing.secretFrom("HTTPS://TSLINK.APP/pair#ABCDEFGHJKLMNPQRSTUV"))
+    }
+
+    @Test fun onlyOurLink() {
+        assertNull(Pairing.secretFrom("http://tslink.app/pair#ABCDEFGHJKLMNPQRSTUV")) // not https
+        assertNull(Pairing.secretFrom("https://evil.example/pair#ABCDEFGHJKLMNPQRSTUV"))
+        assertNull(Pairing.secretFrom("https://tslink.app.evil.example/pair#ABCDEFGHJKLMNPQRSTUV"))
+        assertNull(Pairing.secretFrom("https://user@tslink.app/pair#ABCDEFGHJKLMNPQRSTUV"))
+        assertNull(Pairing.secretFrom("https://tslink.app/other#ABCDEFGHJKLMNPQRSTUV"))
+        assertNull(Pairing.secretFrom("https://tslink.app/pair?s=ABCDEFGHJKLMNPQRSTUV")) // the secret goes after #, never to a server
+        assertNull(Pairing.secretFrom("https://tslink.app/pair#ABCDEFGHJKLMNPQRSTU")) // 19
+        assertNull(Pairing.secretFrom("https://tslink.app/pair"))
+    }
 }

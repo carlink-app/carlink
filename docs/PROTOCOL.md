@@ -216,8 +216,15 @@ different week (clock off).
 ## Pairing with a QR code
 
 1. The car page makes a one-time secret (20 characters from the pairing-code
-   alphabet, 100 bits) and shows `TSLINK-PAIR:<secret>` as a QR code.
-2. The phone app scans it and calls `IEngine.startPairing(secret)`: for up to
+   alphabet, 100 bits) and shows the link `https://tslink.app/pair#<secret>`
+   as a QR code. The secret is the fragment, which browsers never send to a
+   server. Older pages showed `TSLINK-PAIR:<secret>`; the app reads both.
+2. The phone reads it: with TSLink's scanner (Pair a car), or with the
+   phone's own camera, which opens the link in TSLink (Android App Link,
+   verified by `/.well-known/assetlinks.json`; a link only pairs after the
+   user confirms "Pair a car?", since any web page can link there). Without
+   TSLink the link shows a static `/pair` page with no script. The app then
+   calls `IEngine.startPairing(secret)`: for up to
    2 minutes the engine runs with the secret in place of the pairing code (same
    certificate derivation and challenge/response, so the car must have seen
    the QR code to connect).

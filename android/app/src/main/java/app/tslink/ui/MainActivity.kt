@@ -71,6 +71,8 @@ class MainActivity : Activity() {
     private val engineRunning get() = lastStatus is EngineStatus.Running
     /** Pair was tapped while TSLink was off: open the scanner once it runs. */
     private var pendingScan = false
+    /** A linked secret waiting for TSLink to run (with [pendingScan]): pair with it instead of scanning. */
+    private var pendingSecret: String? = null
     /** Until then (uptime ms) pairing is swapping engines: no status polls. */
     private var pairingUntil = 0L
     /** A status poll is out (UI thread only). */
@@ -115,6 +117,7 @@ class MainActivity : Activity() {
         // The pairing code is a credential: keep it out of the Recents thumbnail.
         if (Build.VERSION.SDK_INT >= 33) setRecentsScreenshotEnabled(false)
         if (Prefs.engineWanted(this)) askNotificationPermission() // engine already running: Start isn't tapped
+        if (savedInstanceState == null) pairFromLink(intent)
 
         codeView.text = Prefs.code(this)
         showCar()
@@ -327,19 +330,54 @@ class MainActivity : Activity() {
         openScanner()
     }
 
+    /** Hand the scanned (or linked) secret to the running engine and follow the result. */
+    private fun startPairing(secret: String) {
+        showMessage("Pairing...")
+        call(onResult = { r ->
+            if (r != "pairing") return@call showMessage(r, Home.replyTone(r))
+            showMessage("Pairing: the car connects in a few seconds. Keep the car page open.")
+            pairingUntil = SystemClock.uptimeMillis() + PAIRING_POLLS * 1_000L
+            watchPairing(PAIRING_POLLS)
+        }) { it.startPairing(secret) }
+    }
+
+    /**
+     * Opened from a pairing link (the phone's camera on the car's QR code).
+     * Any web page can link here, with a secret its owner knows: ask before
+     * pairing, so only a QR code the user just scanned pairs a car.
+     */
+    private fun pairFromLink(intent: Intent?) {
+        val secret = intent?.getStringExtra(PairLinkActivity.EXTRA_SECRET) ?: return
+        intent.removeExtra(PairLinkActivity.EXTRA_SECRET) // not again on rotation or a later onResume
+        AlertDialog.Builder(this)
+            .setTitle("Pair a car?")
+            .setMessage("Pair only if you just scanned the QR code on your car's screen.")
+            .setPositiveButton("Pair") { _, _ -> pairWith(secret) }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    /** Pair with [secret], starting TSLink first if it is off. */
+    private fun pairWith(secret: String) {
+        if (engine != null && engineRunning) return startPairing(secret)
+        pendingSecret = secret
+        pendingScan = true
+        startEngine()
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        pairFromLink(intent)
+    }
+
     private fun openScanner() {
         val options = GmsBarcodeScannerOptions.Builder().setBarcodeFormats(Barcode.FORMAT_QR_CODE).build()
         GmsBarcodeScanning.getClient(this, options).startScan()
             .addOnSuccessListener { barcode ->
                 val secret = Pairing.secretFrom(barcode.rawValue)
                     ?: return@addOnSuccessListener showMessage("That isn't a TSLink pairing code. Open tslink.app in the car.", Tone.WARN)
-                showMessage("Pairing...")
-                call(onResult = { r ->
-                    if (r != "pairing") return@call showMessage(r, Home.replyTone(r))
-                    showMessage("Pairing: the car connects in a few seconds. Keep the car page open.")
-                    pairingUntil = SystemClock.uptimeMillis() + PAIRING_POLLS * 1_000L
-                    watchPairing(PAIRING_POLLS)
-                }) { it.startPairing(secret) }
+                startPairing(secret)
             }
             .addOnFailureListener { e -> showMessage("error: scanner unavailable (${e.message})", Tone.ERROR) }
     }
@@ -429,6 +467,8 @@ class MainActivity : Activity() {
         val st = EngineStatus.parse(s)
         val scan = Home.scanAfter(pendingScan, st)
         pendingScan = scan.pending
+        val linked = pendingSecret
+        if (!scan.pending) pendingSecret = null
         when (st) {
             is EngineStatus.Message -> {
                 showMessage(st.text, Home.replyTone(s))
@@ -443,7 +483,7 @@ class MainActivity : Activity() {
             }
         }
         render()
-        if (scan.open) openScanner()
+        if (scan.open) if (linked != null) startPairing(linked) else openScanner()
     }
 
     /** Draw the status card and the Start/Stop button from [lastStatus] and the setup state. */
