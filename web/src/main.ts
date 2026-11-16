@@ -9,6 +9,10 @@ import { PANE_DPI, type AppInfo, type FromWorker, type PageMsg, type PaneLayout,
 import { makeCert, weekStart } from './cert';
 import { ErrorWindow, fingerprint, LogRing, maskCode, resolveCode, shortUA, utcStamp } from './diag';
 import { afterClose, groupApps, refreshRecents } from './apps';
+import { helpFor } from './help';
+import { attachLongPress } from './longpress';
+import { addPin, isPinned, MAX_PINS, parsePins, PINS_KEY, removePin, unpinnedRecents } from './pins';
+import { appsByLetter, filterApps, letters } from './search';
 import { acceptIcons, applyCache, chunkByBytes, ICON_REQUEST_BYTES, loadIcons, MAX_CACHED, saveIcons, validIcon, type CachedIcon } from './iconcache';
 import {
   addBanner, addToTray, callsFirst, nextExpiry, pruneExpired, removeBanner, removeFromTray, sanitizeNotif, trayBadge, trayOthers, validId,
@@ -494,7 +498,49 @@ function showStatus(st: Status) {
   // Connected: show briefly, then get out of the way of the video.
   if (st.s === 'connected') statusTimer = window.setTimeout(() => { el.textContent = ''; }, 2500);
   updateLauncherMsg();
+  updateHelp();
 }
+
+// ---------- connection help: what to check while the phone can't be reached ----------
+
+/** A first connect usually takes well under this: no help panel flashing up at every start. */
+const HELP_DELAY_MS = 2500;
+/** Last error of the current outage (between retries the status says "connecting"). */
+let lastError: string | null = null;
+let helpTimer = 0;
+
+function updateHelp() {
+  const st = lastStatus;
+  if (st.s === 'error') lastError = st.text;
+  else if (st.s !== 'connecting') lastError = null;
+  const h = DEMO ? null : helpFor(st, lastError);
+  if (!h) {
+    clearTimeout(helpTimer);
+    helpTimer = 0;
+    $('help').hidden = true;
+    return;
+  }
+  if (!$('help').hidden || st.s === 'error') { renderHelp(); return; }
+  if (!helpTimer) helpTimer = window.setTimeout(() => { helpTimer = 0; renderHelp(); }, HELP_DELAY_MS);
+}
+
+function renderHelp() {
+  const h = DEMO ? null : helpFor(lastStatus, lastError);
+  $('help').hidden = !h;
+  if (!h) return;
+  $('help').dataset.kind = h.kind;
+  $('help-title').textContent = h.title;
+  $('help-detail').textContent = h.detail; // our own or the browser's error text: textContent
+  $('help-steps').replaceChildren(...h.steps.map((s) => {
+    const li = document.createElement('li');
+    li.textContent = s;
+    return li;
+  }));
+  $('help-retry').hidden = !h.retry;
+}
+$('help-pairing').addEventListener('click', () => showPairing(true));
+// The connection is waiting out its backoff: wake it now.
+$('help-retry').addEventListener('click', () => conn.restart());
 
 let toastTimer = 0;
 function toast(text: string) {
@@ -560,6 +606,19 @@ function onIcons(list: { pkg: string; ih: string; icon: string }[]) {
 let apps: AppInfo[] = [];
 let current: string | null = null;
 let recents: AppInfo[] = loadRecents();
+/** Apps pinned to the top of the rail (shown there whether running or not). */
+let pins: AppInfo[] = loadPins();
+
+function loadPins(): AppInfo[] {
+  try { return parsePins(localStorage.getItem(PINS_KEY)); } catch { return []; }
+}
+
+function setPins(list: AppInfo[]) {
+  pins = list;
+  try { localStorage.setItem(PINS_KEY, JSON.stringify(pins)); } catch { /* quota: icons too big */ }
+  disarm();
+  renderRecents();
+}
 
 function loadRecents(): AppInfo[] {
   try {
@@ -593,28 +652,135 @@ function iconEl(label: string, src: string | undefined): HTMLElement {
 function setApps(list: AppInfo[]) {
   apps = list.filter((a) => a && typeof a.pkg === 'string');
   recents = refreshRecents(recents, apps);
+  pins = refreshRecents(pins, apps);
   renderRecents();
-  $('grid').replaceChildren(...groupApps(apps).map((g) => {
-    const section = document.createElement('section');
-    section.className = 'app-group';
-    const h = document.createElement('h2');
-    h.textContent = g.title;
-    const grid = document.createElement('div');
-    grid.className = 'app-grid';
-    grid.append(...g.apps.map((a) => {
-      const b = document.createElement('button');
-      b.className = 'app';
-      const label = document.createElement('span');
-      label.textContent = a.label || a.pkg;
-      b.append(appIcon(a), label);
-      b.addEventListener('click', () => launch(a));
-      return b;
-    }));
-    section.append(h, grid);
-    return section;
-  }));
+  renderLetters();
+  renderGrid();
   updateLauncherMsg();
 }
+
+// Launcher search: a letter from the A–Z strip or typed text narrows the
+// grouped view to one flat, sorted list. Only one of the two at a time.
+let query = '';
+let letter = '';
+
+function appTile(a: AppInfo): HTMLButtonElement {
+  const b = document.createElement('button');
+  b.className = 'app';
+  const label = document.createElement('span');
+  label.textContent = a.label || a.pkg;
+  b.append(appIcon(a), label);
+  attachLongPress(b, () => openSheet(a)); // before the tap handler: it swallows the lift's click
+  b.addEventListener('click', () => launch(a));
+  return b;
+}
+
+function appSection(title: string, list: AppInfo[]): HTMLElement {
+  const section = document.createElement('section');
+  section.className = 'app-group';
+  const h = document.createElement('h2');
+  h.textContent = title;
+  const grid = document.createElement('div');
+  grid.className = 'app-grid';
+  grid.append(...list.map(appTile));
+  section.append(h, grid);
+  return section;
+}
+
+function renderGrid() {
+  const searching = !!(letter || query.trim());
+  $('search-clear').hidden = !searching && !query;
+  if (!searching) {
+    $('grid').replaceChildren(...groupApps(apps).map((g) => appSection(g.title, g.apps)));
+    return;
+  }
+  const list = letter ? appsByLetter(apps, letter) : filterApps(apps, query);
+  const title = letter ? `Apps starting with ${letter === '#' ? 'a number or symbol' : letter}` : `Apps matching “${query.trim()}”`;
+  if (list.length) {
+    $('grid').replaceChildren(appSection(title, list));
+  } else {
+    const none = document.createElement('div');
+    none.className = 'no-match';
+    none.textContent = `No apps match “${query.trim()}”`;
+    $('grid').replaceChildren(none);
+  }
+}
+
+function renderLetters() {
+  $('launcher-bar').hidden = apps.length === 0;
+  $('letters').replaceChildren(...letters(apps).map((l) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'letter' + (l === letter ? ' active' : '');
+    b.textContent = l;
+    b.setAttribute('aria-pressed', String(l === letter));
+    b.setAttribute('aria-label', l === '#' ? 'Numbers and symbols' : `Apps starting with ${l}`);
+    b.addEventListener('click', () => setFilter(l === letter ? '' : l, ''));
+    return b;
+  }));
+}
+
+function setFilter(nextLetter: string, nextQuery: string) {
+  const input = $<HTMLInputElement>('search');
+  const changed = nextLetter !== letter;
+  letter = nextLetter;
+  query = nextQuery;
+  if (input.value !== query) input.value = query;
+  if (letter) input.blur(); // put the on-screen keyboard away
+  if (changed) renderLetters();
+  renderGrid();
+  $('launcher').scrollTop = 0;
+}
+
+$('search').addEventListener('input', () => setFilter('', $<HTMLInputElement>('search').value));
+$('search').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('search').blur(); });
+$('search-clear').addEventListener('click', () => { setFilter('', ''); $('search').blur(); });
+
+// ---------- app actions (long press on a launcher tile or a rail app) ----------
+
+let sheetApp: AppInfo | null = null;
+let sheetShownAt = 0;
+
+function openSheet(a: AppInfo) {
+  sheetApp = a;
+  sheetShownAt = performance.now();
+  $('sheet-icon').replaceChildren(appIcon(a));
+  $('sheet-label').textContent = a.label || a.pkg;
+  const pinned = isPinned(pins, a);
+  const full = !pinned && pins.length >= MAX_PINS;
+  const pin = $<HTMLButtonElement>('sheet-pin');
+  pin.textContent = pinned ? 'Unpin from rail' : full ? `Rail full (${MAX_PINS}): unpin one first` : 'Pin to rail';
+  pin.disabled = full;
+  $('sheet').hidden = false;
+}
+
+function closeSheet() {
+  sheetApp = null;
+  $('sheet').hidden = true;
+}
+
+/** A sheet action, unless the tap came right as the sheet appeared (the finger was still on the tile). */
+function sheetAction(fn: (a: AppInfo) => void) {
+  return (e: Event) => {
+    e.stopPropagation();
+    if (performance.now() - sheetShownAt < TAP_GUARD_MS || !sheetApp) return;
+    const a = sheetApp;
+    closeSheet();
+    fn(a);
+  };
+}
+
+$('sheet-open').addEventListener('click', sheetAction((a) => launch(a)));
+$('sheet-pin').addEventListener('click', sheetAction((a) => {
+  if (isPinned(pins, a)) { setPins(removePin(pins, a)); return; }
+  const next = addPin(pins, a);
+  if (next) { setPins(next); toast(`${a.label || a.pkg} pinned to the rail`); }
+}));
+$('sheet-cancel').addEventListener('click', sheetAction(() => {}));
+// A tap beside the card closes it.
+$('sheet').addEventListener('click', (e) => {
+  if (e.target === $('sheet') && performance.now() - sheetShownAt >= TAP_GUARD_MS) closeSheet();
+});
 
 function updateLauncherMsg() {
   let msg = '';
@@ -659,7 +825,10 @@ function closeApp(pkg: string) {
   disarm();
   $('recents').querySelectorAll<HTMLElement>('.recent').forEach((el) => {
     el.classList.toggle('current', el.dataset.pkg === current);
-    if (el.dataset.pkg === pkg) el.classList.add('leaving');
+    // A pinned app stays on the rail, just no longer running.
+    if (el.dataset.pkg !== pkg) return;
+    if (el.classList.contains('pinned')) el.classList.remove('running');
+    else el.classList.add('leaving');
   });
   // Re-launched within the animation? Then it stays on the rail.
   setTimeout(() => setRecents(recents.filter((a) => a.pkg !== pkg || a.pkg === current)), LEAVE_MS);
@@ -668,7 +837,7 @@ function closeApp(pkg: string) {
 function closeAll() {
   send({ t: 'close-all', pane: 0 });
   current = null;
-  $('recents').querySelectorAll('.recent').forEach((el) => el.classList.add('leaving'));
+  $('recents').querySelectorAll('.recent:not(.pinned)').forEach((el) => el.classList.add('leaving'));
   showLauncher(true);
   setTimeout(() => setRecents([]), LEAVE_MS);
 }
@@ -692,31 +861,44 @@ function renderArmed() {
   $('btn-closeall').classList.toggle('armed', armed === '*');
 }
 
+/** Rail apps: the pinned ones on top, then recents that aren't pinned. */
 function renderRecents() {
-  $('recents').replaceChildren(...recents.map((a) => {
-    const b = document.createElement('button');
-    b.className = 'rail-btn recent' + (a.pkg === current ? ' current' : '');
-    b.dataset.pkg = a.pkg;
-    b.setAttribute('aria-label', a.label);
-    const x = document.createElement('span');
-    x.className = 'close-badge';
-    x.appendChild(closeIcon());
-    b.append(appIcon(a), x);
-    b.addEventListener('click', () => {
-      if (armed === a.pkg) closeApp(a.pkg);
-      // Tapping the app already in front again offers to close it.
-      else if (a.pkg === current && !launcherOn) arm(a.pkg);
-      else launch(a);
-    });
-    return b;
-  }));
+  const rest = unpinnedRecents(recents, pins);
+  const divider = document.createElement('div');
+  divider.className = 'rail-divider';
+  $('recents').replaceChildren(
+    ...pins.map((a) => railApp(a, true)),
+    ...(pins.length && rest.length ? [divider] : []),
+    ...rest.map((a) => railApp(a, false)),
+  );
   $('btn-closeall').hidden = recents.length === 0;
   renderArmed(); // a re-render (new app list) keeps a pending close visible
+}
+
+function railApp(a: AppInfo, pinned: boolean): HTMLButtonElement {
+  const b = document.createElement('button');
+  const running = recents.some((r) => r.pkg === a.pkg);
+  b.className = 'rail-btn recent' + (pinned ? ' pinned' : '') + (pinned && running ? ' running' : '') + (a.pkg === current ? ' current' : '');
+  b.dataset.pkg = a.pkg;
+  b.setAttribute('aria-label', pinned ? `${a.label} (pinned)` : a.label);
+  const x = document.createElement('span');
+  x.className = 'close-badge';
+  x.appendChild(closeIcon());
+  b.append(appIcon(a), x);
+  attachLongPress(b, () => { disarm(); openSheet(a); });
+  b.addEventListener('click', () => {
+    if (armed === a.pkg) closeApp(a.pkg);
+    // Tapping the app already in front again offers to close it.
+    else if (a.pkg === current && !launcherOn) arm(a.pkg);
+    else launch(a);
+  });
+  return b;
 }
 
 let launcherOn = false;
 function showLauncher(on: boolean) {
   if (on) { $('opening').hidden = true; showTray(false); }
+  else if (letter || query) setFilter('', ''); // the full launcher next time
   if (on !== launcherOn) disarm(); // a close armed for the app in front no longer applies
   launcherOn = on;
   $('launcher').hidden = !on;

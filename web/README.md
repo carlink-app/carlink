@@ -39,6 +39,16 @@ same screen has a Display setting (whether notification banners show message
 text); it applies and saves on tap, without reconnecting. The phone's UI size
 is automatic: the biggest that keeps apps in their wide layout (`paneDpi`).
 
+Rail and launcher: long-press (500 ms, holding still) an app tile, or an app
+on the rail, for Open / Pin to rail / Unpin. Up to 5 pinned apps stay at the
+top of the rail (`tslink.pins`), above the recents (which skip pinned apps);
+a dot under a pinned app means it's running. The launcher has a search field
+(label, case and accents ignored) and an A–Z strip of the letters that have
+apps; either one shows a flat, sorted list instead of the category groups.
+While the phone can't be reached, a help panel (after 2.5 s on a first
+connect, at once on an error) says what to check for that error, with
+Pairing and Retry now buttons.
+
 ## Demo mode
 
 `?demo=1` needs no phone: it plays `public/demo/clip.h264` (Annex B H.264,
@@ -99,7 +109,7 @@ the fake apps and banners.)
 
 | file | |
 |---|---|
-| `src/main.ts` | UI: rail, launcher, recents, banners, pairing + display settings, debug overlay, layout messages |
+| `src/main.ts` | UI: rail (pins + recents), launcher (search, A–Z), connection help, banners, pairing + display settings, debug overlay, layout messages |
 | `src/connection.ts` | WebTransport session, auth handshake, control stream, pings/RTT, reconnect loop |
 | `src/auth.ts` | control-stream auth MAC (HMAC-SHA256 over the phone's nonce) |
 | `src/reorder.ts` | per-pane frame sequencing: reorder, sync to keyframes, gaps, seq wraparound |
@@ -108,6 +118,10 @@ the fake apps and banners.)
 | `src/cert.ts` | deterministic certificate hash from the pairing code (matches `core/src/cert.rs`) |
 | `src/touch.ts` | pointer events -> `touch` messages, ripple |
 | `src/h26x.ts` | Annex B parsing, codec string from SPS |
+| `src/pins.ts` | apps pinned to the rail: storage parsing, pin/unpin, recents without the pinned |
+| `src/search.ts` | launcher search: label filter, A–Z letter index |
+| `src/longpress.ts` | long press on a tile/rail app (opens the pin sheet), swallowing the lift's click |
+| `src/help.ts` | connection help panel: error status -> what to check |
 | `src/notifs.ts` | notification banners: validation/truncation of `notif`, banner queue and expiry |
 | `src/diag.ts` | pure helpers: code masking, cert fingerprint, HEVC error window, debug log ring |
 | `src/demo.ts` | demo feeder + fake apps + fake notifications |

@@ -35,10 +35,37 @@
     <main id="main">
       <div id="panes"></div>
       <section id="launcher">
+        <div id="launcher-bar" hidden>
+          <div class="search-box">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+            <input id="search" type="search" placeholder="Search apps" aria-label="Search apps" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="done">
+            <button type="button" id="search-clear" aria-label="Clear search" hidden><svg viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></button>
+          </div>
+          <div id="letters" role="group" aria-label="Apps by first letter"></div>
+        </div>
         <div id="launcher-msg"></div>
         <div id="grid"></div>
       </section>
       <div id="opening" hidden><div class="opening-card"><div id="opening-icon"></div><div id="opening-label"></div></div></div>
+      <section id="help" hidden aria-live="polite">
+        <div class="help-card">
+          <h2 id="help-title"></h2>
+          <p id="help-detail"></p>
+          <ol id="help-steps"></ol>
+          <div class="help-buttons">
+            <button type="button" id="help-pairing" class="secondary">Pairing</button>
+            <button type="button" id="help-retry" class="primary">Retry now</button>
+          </div>
+        </div>
+      </section>
+      <div id="sheet" hidden>
+        <div class="sheet-card" role="dialog" aria-modal="true" aria-labelledby="sheet-label">
+          <div class="sheet-head"><div id="sheet-icon"></div><div id="sheet-label"></div></div>
+          <button type="button" id="sheet-open">Open</button>
+          <button type="button" id="sheet-pin">Pin to rail</button>
+          <button type="button" id="sheet-cancel" class="secondary">Cancel</button>
+        </div>
+      </div>
       <div id="notifs" aria-live="polite"></div>
       <section id="tray" hidden aria-label="Notifications">
         <div class="tray-head"><h2>Notifications</h2><button type="button" id="tray-clear">Clear all</button></div>
