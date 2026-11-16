@@ -14,7 +14,7 @@ data class HomeView(val state: String, val hint: String?, val primary: Primary, 
  * to the user TSLink is just on or off.
  */
 object Home {
-    const val CAR_HINT = "In the car: join this phone's hotspot and open tslink.app"
+    const val CAR_HINT = "Turn on the car hotspot. In the car, join it and open tslink.app, then pair."
 
     fun view(setupReady: Boolean, status: EngineStatus): HomeView {
         // Shizuku stopped or not allowed: nothing else works, whatever the engine last said.

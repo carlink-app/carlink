@@ -57,6 +57,9 @@ class MainActivity : Activity() {
     private lateinit var stateView: TextView
     private lateinit var hintView: TextView
     private lateinit var primaryButton: Button
+    private lateinit var carHotspotButton: Button
+    /** Car hotspot turned on from here (the engine can't report the mode). */
+    private var carHotspotOn = false
     private lateinit var messageView: TextView
     private lateinit var codeBox: LinearLayout
     private lateinit var codeView: TextView
@@ -172,6 +175,9 @@ class MainActivity : Activity() {
         })
         hintView = ui.line().apply { visibility = View.GONE }
         card.addView(hintView)
+        // The car can only join the hotspot in car mode: offer it where the user looks.
+        carHotspotButton = ui.button("Turn on car hotspot", primary = false) { setHotspot(car = true) }
+        card.addView(carHotspotButton, fullWidth(top = 12))
         primaryButton = ui.button("", primary = true) { onPrimary() }
         card.addView(primaryButton, fullWidth(top = 16))
         // Right under the button: what happened when it was tapped.
@@ -413,6 +419,8 @@ class MainActivity : Activity() {
         ui.setDot(stateDot, when (v.color) { HomeColor.OK -> Ui.OK; HomeColor.WARN -> Ui.WARN; HomeColor.MUTED -> Ui.MUTED })
         hintView.text = v.hint.orEmpty()
         hintView.visibility = if (v.hint == null) View.GONE else View.VISIBLE
+        carHotspotButton.visibility = if (v.hint != null) View.VISIBLE else View.GONE
+        carHotspotButton.text = if (carHotspotOn) "Car hotspot is on ✓" else "Turn on car hotspot"
         primaryButton.text = when (v.primary) {
             Primary.FINISH_SETUP -> "Finish setup"
             Primary.PAIR -> "Pair a car (scan QR)"
@@ -449,6 +457,8 @@ class MainActivity : Activity() {
         showHotspot(if (car) "Switching to car hotspot..." else "Switching to normal hotspot...", Ui.MUTED)
         call(onResult = { r ->
             if (r == "ok") {
+                carHotspotOn = car
+                render()
                 ui.selectSegment(hotspotChoice, if (car) 0 else 1)
                 showHotspot(if (car) "Car hotspot is on. Join it from the car, then open the car page." else "Normal hotspot is on.", Ui.OK)
             } else {

@@ -29,7 +29,7 @@ class HomeTest {
     @Test fun readyOffersPair() {
         val v = Home.view(true, waiting)
         assertEquals("Ready: waiting for the car", v.state)
-        assertEquals("In the car: join this phone's hotspot and open tslink.app", v.hint)
+        assertEquals("Turn on the car hotspot. In the car, join it and open tslink.app, then pair.", v.hint)
         assertEquals(Primary.PAIR, v.primary)
         assertEquals(HomeColor.WARN, v.color)
     }
