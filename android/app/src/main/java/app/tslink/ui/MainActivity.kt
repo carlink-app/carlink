@@ -2,9 +2,6 @@ package app.tslink.ui
 
 import android.Manifest
 import android.annotation.SuppressLint
-import com.google.mlkit.vision.barcode.common.Barcode
-import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
-import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
 import android.app.Activity
 import android.app.AlertDialog
 import android.app.NotificationManager
@@ -34,6 +31,9 @@ import app.tslink.engine.IEngine
 import app.tslink.engine.startFor
 import app.tslink.notify.CarSessionNotice
 import app.tslink.notify.Listener
+import com.google.mlkit.vision.barcode.common.Barcode
+import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
+import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
 import rikka.shizuku.Shizuku
 import kotlin.concurrent.thread
 

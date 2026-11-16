@@ -3,7 +3,7 @@
 // secret instead of the pairing code; the first connection made with it gets
 // the real code in a `paired` message.
 import qrcode from 'qrcode-generator';
-import { CODE_LENGTH, normalizeCode } from './cert';
+import { CODE_LENGTH, groupCode, normalizeCode } from './cert';
 
 /** Same alphabet as the phone's pairing codes (no 0/O, 1/I). */
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -22,7 +22,7 @@ export function pairedCode(v: unknown): string | null {
   if (typeof v !== 'string') return null;
   const c = normalizeCode(v);
   if (c.length !== CODE_LENGTH || [...c].some((ch) => !ALPHABET.includes(ch))) return null;
-  return c.replace(/(.{4})(?=.)/g, '$1-');
+  return groupCode(c);
 }
 
 /** Dark modules of the QR code for [text] (error correction M). */

@@ -8,7 +8,8 @@ import java.security.SecureRandom
 object Prefs {
     const val PORT = 4433
     private const val FILE = "tslink"
-    private const val ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+    /** Pairing codes and the car page's QR secrets (no 0/O, 1/I). */
+    const val ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 
     private fun prefs(ctx: Context) = ctx.getSharedPreferences(FILE, Context.MODE_PRIVATE)
 

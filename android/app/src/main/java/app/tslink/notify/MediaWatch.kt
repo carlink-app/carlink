@@ -12,6 +12,7 @@ import android.os.Looper
 import android.util.Base64
 import android.util.Log
 import androidx.annotation.WorkerThread
+import app.tslink.engine.Media
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.Executors
@@ -144,7 +145,7 @@ class MediaWatch(
         val small = Bitmap.createScaledBitmap(bmp, ART_PX, ART_PX, true)
         val bytes = ByteArrayOutputStream().use { small.compress(Bitmap.CompressFormat.JPEG, 80, it); it.toByteArray() }
         if (small !== bmp) small.recycle()
-        ("data:image/jpeg;base64," + Base64.encodeToString(bytes, Base64.NO_WRAP)).takeIf { it.length <= MAX_ART }
+        ("data:image/jpeg;base64," + Base64.encodeToString(bytes, Base64.NO_WRAP)).takeIf { it.length <= Media.MAX_ART }
     } catch (e: Exception) {
         null
     }
@@ -152,7 +153,6 @@ class MediaWatch(
     companion object {
         private const val TAG = "tslink-notif"
         private const val ART_PX = 160
-        const val MAX_ART = 32 * 1024
     }
 }
 

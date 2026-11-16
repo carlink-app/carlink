@@ -6,7 +6,7 @@ import org.json.JSONObject
 /** Now-playing payloads for the car: the limits from docs/PROTOCOL.md. */
 object Media {
     private val PKG = Regex("^[A-Za-z0-9_.]{1,200}$")
-    private const val MAX_ART = 32 * 1024
+    const val MAX_ART = 32 * 1024
     val COMMANDS = setOf("play", "pause", "next", "prev")
 
     /** A clean `media` message for the car, or null if [m] isn't valid. */

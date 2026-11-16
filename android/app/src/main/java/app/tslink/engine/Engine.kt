@@ -20,8 +20,7 @@ import java.util.concurrent.atomic.AtomicLong
  * and input. Runs in the shell-privileged process. Every callback from the
  * native core is posted to one thread, so all state is touched by it only.
  * Messages only arrive after the car authenticated (see core/src/server.rs).
- */
-/**
+ *
  * [handover]: pairing mode. [code] is then the one-time secret from the car
  * page's QR code, and the first car that authenticates with it gets the real
  * pairing code ([handover]) in a `paired` message; nothing else is served.
@@ -62,9 +61,9 @@ class Engine(
     private var codec = "h264"
     private var level = 800
     private var apps: Apps.Listing? = null
-    /** Notifications still on the phone, re-sent to a car that (re)connects. */
     /** What plays on the phone now (sanitized `media`), sent again to a car that connects. */
     private var media: JSONObject? = null
+    /** Notifications still on the phone, re-sent to a car that (re)connects. */
     private val activeNotifs = object : LinkedHashMap<String, Pair<JSONObject, Long>>() {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Pair<JSONObject, Long>>) = size > 10
     }

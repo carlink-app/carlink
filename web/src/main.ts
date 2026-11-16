@@ -11,7 +11,7 @@ import { ErrorWindow, fingerprint, LogRing, maskCode, resolveCode, shortUA, utcS
 import { afterClose, groupApps, refreshRecents } from './apps';
 import { parseMedia, subtitle, type NowPlaying } from './media';
 import { drawQr, newSecret, pairedCode, qrModules, qrText } from './pairing';
-import { helpFor } from './help';
+import { errorText, helpFor } from './help';
 import { attachLongPress } from './longpress';
 import { addPin, isPinned, MAX_PINS, parsePins, PINS_KEY, removePin, unpinnedRecents } from './pins';
 import { appsByLetter, filterApps, letters } from './search';
@@ -564,7 +564,7 @@ function showStatus(st: Status) {
     return;
   }
   // The retry countdown changes each time; without it, repeats collapse in the log.
-  if (st.s === 'error') logLine(st.text.replace(/ · retrying in .*$/, ''));
+  if (st.s === 'error') logLine(errorText(st.text));
   lastStatus = st;
   // No phone, no notifications: nothing stays readable in a parked car.
   if (st.s !== 'connected') clearNotifs();
@@ -827,7 +827,9 @@ function openSheet(a: AppInfo) {
   const pinned = isPinned(pins, a);
   const full = !pinned && pins.length >= MAX_PINS;
   const pin = $<HTMLButtonElement>('sheet-pin');
-  pin.textContent = pinned ? 'Unpin from rail' : full ? `Rail full (${MAX_PINS}): unpin one first` : 'Pin to rail';
+  if (pinned) pin.textContent = 'Unpin from rail';
+  else if (full) pin.textContent = `Rail full (${MAX_PINS}): unpin one first`;
+  else pin.textContent = 'Pin to rail';
   pin.disabled = full;
   $('sheet').hidden = false;
 }
@@ -1084,18 +1086,23 @@ function startQrPairing() {
   $('pair-qr').hidden = false;
   $('pairing-form').hidden = true;
   // Connect with the secret; the phone accepts it once it has scanned the code.
-  const saved = loadSaved();
-  settings = { ...settings, code: pairingSecret, host: saved.host, port: saved.port };
+  useCode(pairingSecret);
   conn.restart();
+}
+
+/** Connect with [code] at the saved address. */
+function useCode(code: string) {
+  const saved = loadSaved();
+  settings = { ...settings, code, host: saved.host, port: saved.port };
 }
 
 /** Leave QR pairing without a result: back to the saved code (if any). */
 function stopQrPairing() {
   if (!pairingSecret) return;
   pairingSecret = null;
-  const saved = loadSaved();
-  settings = { ...settings, code: saved.code, host: saved.host, port: saved.port };
-  if (saved.code) conn.restart();
+  const { code } = loadSaved();
+  useCode(code);
+  if (code) conn.restart();
   else conn.stop(); // nothing to connect with until a code is typed
 }
 
