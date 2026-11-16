@@ -14,6 +14,9 @@ enum class StepId {
     XIAOMI_USB_SECURITY, XIAOMI_AUTOSTART, SAMSUNG_SLEEP, OPPO_BACKGROUND,
 }
 
+/** Setup's three pages, in order. */
+enum class SetupPage(val title: String) { SHIZUKU("Shizuku"), PHONE("Battery & hotspot"), OPTIONAL("Optional") }
+
 /** Phone makers whose own settings get in TSLink's way. */
 enum class Brand {
     XIAOMI, SAMSUNG, OPPO, OTHER;
@@ -168,6 +171,22 @@ object Setup {
         else "${ready(required)} of ${required.size} ready"
         return if (optional.isEmpty()) head else "$head · optional ${ready(optional)} of ${optional.size}"
     }
+
+    fun page(id: StepId): SetupPage = when (id) {
+        StepId.SHIZUKU_INSTALLED, StepId.SHIZUKU_RUNNING, StepId.SHIZUKU_ALLOWED -> SetupPage.SHIZUKU
+        StepId.NOTIFICATION_PERMISSION, StepId.CAR_NOTIFICATIONS, StepId.CAR -> SetupPage.OPTIONAL
+        StepId.BATTERY, StepId.HOTSPOT,
+        StepId.XIAOMI_USB_SECURITY, StepId.XIAOMI_AUTOSTART, StepId.SAMSUNG_SLEEP, StepId.OPPO_BACKGROUND -> SetupPage.PHONE
+    }
+
+    /** The Shizuku page shows one card: the first of install, start, allow that isn't done (else the last). */
+    fun shizukuStep(steps: List<SetupStep>): SetupStep {
+        val shizuku = steps.filter { page(it.id) == SetupPage.SHIZUKU }
+        return shizuku.firstOrNull { it.state != StepState.OK } ?: shizuku.last()
+    }
+
+    fun pageReady(page: SetupPage, steps: List<SetupStep>) =
+        steps.filter { page(it.id) == page && !it.optional }.all { it.state == StepState.OK }
 
     fun allRequiredReady(steps: List<SetupStep>) = steps.filterNot { it.optional }.all { it.state == StepState.OK }
 

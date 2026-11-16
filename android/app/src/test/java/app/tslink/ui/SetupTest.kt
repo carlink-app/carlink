@@ -139,4 +139,34 @@ class SetupTest {
         assertEquals("Can't check yet", Setup.stateLabel(step(fresh, StepId.SHIZUKU_ALLOWED)))
         assertEquals("Check it, then mark it done", Setup.stateLabel(step(fresh, StepId.HOTSPOT)))
     }
+
+    @Test
+    fun everyStepHasAPage() {
+        for (id in StepId.entries) Setup.page(id) // no exception: every step is on a page
+        for (id in listOf(StepId.XIAOMI_USB_SECURITY, StepId.XIAOMI_AUTOSTART, StepId.SAMSUNG_SLEEP, StepId.OPPO_BACKGROUND)) {
+            assertEquals(SetupPage.PHONE, Setup.page(id))
+        }
+        assertEquals(SetupPage.SHIZUKU, Setup.page(StepId.SHIZUKU_RUNNING))
+        assertEquals(SetupPage.OPTIONAL, Setup.page(StepId.CAR))
+    }
+
+    @Test
+    fun shizukuStepIsFirstUnfinished() {
+        assertEquals(StepId.SHIZUKU_INSTALLED, Setup.shizukuStep(Setup.steps(fresh)).id)
+        val notAllowed = fresh.copy(shizukuInstalled = true, shizukuRunning = true, shizukuAllowed = false)
+        assertEquals(StepId.SHIZUKU_ALLOWED, Setup.shizukuStep(Setup.steps(notAllowed)).id)
+        val done = Setup.shizukuStep(Setup.steps(ready))
+        assertEquals(StepId.SHIZUKU_ALLOWED, done.id)
+        assertEquals(StepState.OK, done.state)
+    }
+
+    @Test
+    fun pageReady() {
+        val allowed = fresh.copy(shizukuInstalled = true, shizukuRunning = true, shizukuAllowed = true)
+        assertFalse(Setup.pageReady(SetupPage.SHIZUKU, Setup.steps(fresh)))
+        assertTrue(Setup.pageReady(SetupPage.SHIZUKU, Setup.steps(allowed)))
+        assertFalse(Setup.pageReady(SetupPage.PHONE, Setup.steps(allowed.copy(batteryUnrestricted = true))))
+        assertTrue(Setup.pageReady(SetupPage.PHONE, Setup.steps(allowed.copy(batteryUnrestricted = true, ticked = setOf(StepId.HOTSPOT)))))
+        assertTrue(Setup.pageReady(SetupPage.OPTIONAL, Setup.steps(fresh)))
+    }
 }
