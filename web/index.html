@@ -16,6 +16,10 @@
         <svg viewBox="0 0 24 24"><path d="M4 4h4v4H4zm6 0h4v4h-4zm6 0h4v4h-4zM4 10h4v4H4zm6 0h4v4h-4zm6 0h4v4h-4zM4 16h4v4H4zm6 0h4v4h-4zm6 0h4v4h-4z"/></svg>
       </button>
       <div id="recents"></div>
+      <button id="btn-media" class="rail-btn" aria-label="Now playing" hidden>
+        <span id="media-thumb"></span>
+        <span id="media-eq" aria-hidden="true"><i></i><i></i><i></i></span>
+      </button>
       <button id="btn-tray" class="rail-btn small" aria-label="Notifications" hidden>
         <svg viewBox="0 0 24 24"><path d="M12 22a2 2 0 0 0 2-2h-4a2 2 0 0 0 2 2zm6-6V11c0-3.07-1.63-5.64-4.5-6.32V4a1.5 1.5 0 0 0-3 0v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1z"/></svg>
         <span id="tray-count"></span>
@@ -67,6 +71,18 @@
         </div>
       </div>
       <div id="notifs" aria-live="polite"></div>
+      <section id="media" hidden aria-label="Now playing">
+        <div class="media-head">
+          <span id="media-art"></span>
+          <div class="media-texts"><div id="media-title"></div><div id="media-sub"></div></div>
+        </div>
+        <div class="media-buttons">
+          <button type="button" id="media-prev" aria-label="Previous"><svg viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg></button>
+          <button type="button" id="media-play" class="play" aria-label="Play"><svg viewBox="0 0 24 24"><path id="media-play-icon" d="M8 5v14l11-7z"/></svg></button>
+          <button type="button" id="media-next" aria-label="Next"><svg viewBox="0 0 24 24"><path d="M6 18l8.5-6L6 6zM16 6h2v12h-2z"/></svg></button>
+        </div>
+        <button type="button" id="media-open" class="media-open">Open app</button>
+      </section>
       <section id="tray" hidden aria-label="Notifications">
         <div class="tray-head"><h2>Notifications</h2><button type="button" id="tray-clear">Clear all</button></div>
         <div id="tray-list"></div>

@@ -228,3 +228,20 @@ different week (clock off).
 
 Typing the code on the page stays available ("Type the code instead").
 
+## Now playing
+
+Phone to car, whenever the phone's current media session changes (and after
+`hello`):
+
+```
+{"t":"media","pkg":"com.spotify.music","app":"Spotify","title":"Song","artist":"Band","playing":true,"prev":true,"next":true,"art":"data:image/jpeg;base64,..."}
+{"t":"media","none":true}
+```
+
+Limits: title and artist 120 characters, app 60, `art` a JPEG or PNG data URL
+of at most 32 KB (160 px). `prev`/`next`: whether the player supports them.
+
+Car to phone: `{"t":"media-cmd","a":"play"}` with `a` one of `play`, `pause`,
+`next`, `prev`. The phone app runs it on the media session (it reads sessions
+with its notification access); without notification access nothing is sent.
+

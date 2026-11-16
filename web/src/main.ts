@@ -9,6 +9,7 @@ import { PANE_DPI, type AppInfo, type FromWorker, type PageMsg, type PaneLayout,
 import { formatCode, makeCert, weekStart } from './cert';
 import { ErrorWindow, fingerprint, LogRing, maskCode, resolveCode, shortUA, utcStamp } from './diag';
 import { afterClose, groupApps, refreshRecents } from './apps';
+import { parseMedia, subtitle, type NowPlaying } from './media';
 import { drawQr, newSecret, pairedCode, qrModules, qrText } from './pairing';
 import { helpFor } from './help';
 import { attachLongPress } from './longpress';
@@ -184,6 +185,7 @@ const conn = new Connection({
     rtt.clear();
     for (const p of panes) p.video = null;
     toWorker({ type: 'reset' });
+    setMedia(null); // the phone sends what plays after hello
     // Banners of the previous session would never get their notif-gone.
     clearNotifs();
   },
@@ -227,6 +229,7 @@ function onMessage(m: PhoneMsg) {
     case 'apps': void onApps(Array.isArray(m.list) ? m.list : []); break;
     case 'app-icons': if (Array.isArray(m.list)) onIcons(m.list); break;
     case 'paired': onPaired(m.code); break;
+    case 'media': setMedia(parseMedia(m as Record<string, unknown>)); break;
     case 'rate': rateKbps = Number(m.kbps) || 0; break;
     case 'error': toast(`Phone: ${m.msg}`); break;
     case 'notif': {
@@ -323,7 +326,75 @@ function renderTray() {
   }));
 }
 
-$('btn-tray').addEventListener('click', () => showTray($('tray').hidden === true));
+$('btn-tray').addEventListener('click', () => { showMedia(false); showTray($('tray').hidden === true); });
+
+// ---------- now playing ----------
+
+let nowPlaying: NowPlaying | null = null;
+const PLAY_ICON = 'M8 5v14l11-7z';
+const PAUSE_ICON = 'M6 5h4v14H6zm8 0h4v14h-4z';
+
+/** Cover art as a background (validated data URL), else the app's first letter. */
+function paintArt(el: HTMLElement, n: NowPlaying) {
+  el.style.backgroundImage = n.art ? `url("${n.art}")` : '';
+  el.textContent = n.art ? '' : (n.app || n.title).charAt(0).toUpperCase();
+}
+
+function setMedia(n: NowPlaying | null) {
+  nowPlaying = n;
+  const btn = $('btn-media');
+  btn.hidden = !n;
+  if (!n) { showMedia(false); return; }
+  btn.classList.toggle('playing', n.playing);
+  btn.setAttribute('aria-label', `Now playing: ${n.title}`);
+  paintArt($('media-thumb'), n);
+  if (!$('media').hidden) renderMedia();
+}
+
+function renderMedia() {
+  const n = nowPlaying;
+  if (!n) return;
+  paintArt($('media-art'), n);
+  $('media-title').textContent = n.title;
+  $('media-sub').textContent = subtitle(n);
+  $('media-play-icon').setAttribute('d', n.playing ? PAUSE_ICON : PLAY_ICON);
+  $('media-play').setAttribute('aria-label', n.playing ? 'Pause' : 'Play');
+  $<HTMLButtonElement>('media-prev').disabled = !n.prev;
+  $<HTMLButtonElement>('media-next').disabled = !n.next;
+  const app = apps.find((a) => a.pkg === n.pkg);
+  $('media-open').hidden = !app;
+  $('media-open').textContent = `Open ${app?.label ?? n.app}`;
+}
+
+let mediaShownAt = 0;
+function showMedia(on: boolean) {
+  $('media').hidden = !on;
+  $('btn-media').classList.toggle('active', on);
+  if (on) { mediaShownAt = performance.now(); showTray(false); renderMedia(); }
+}
+
+function mediaCmd(a: 'play' | 'pause' | 'next' | 'prev') {
+  if (performance.now() - mediaShownAt < TAP_GUARD_MS) return;
+  send({ t: 'media-cmd', a });
+  // Feels instant; the phone's next update confirms (or corrects) it.
+  if (nowPlaying && (a === 'play' || a === 'pause')) setMedia({ ...nowPlaying, playing: a === 'play' });
+}
+
+$('btn-media').addEventListener('click', () => showMedia($('media').hidden === true));
+$('media-play').addEventListener('click', () => mediaCmd(nowPlaying?.playing ? 'pause' : 'play'));
+$('media-prev').addEventListener('click', () => mediaCmd('prev'));
+$('media-next').addEventListener('click', () => mediaCmd('next'));
+$('media-open').addEventListener('click', () => {
+  const app = nowPlaying && apps.find((a) => a.pkg === nowPlaying!.pkg);
+  showMedia(false);
+  if (app) launch(app);
+});
+// A touch outside the card closes it; over the app it only closes it (like the tray).
+$('main').addEventListener('pointerdown', (e) => {
+  if ($('media').hidden || $('media').contains(e.target as Node)) return;
+  showMedia(false);
+  if ($('panes').contains(e.target as Node)) { e.stopPropagation(); e.preventDefault(); }
+}, { capture: true });
 $('tray-clear').addEventListener('click', () => {
   for (const n of tray) remember(n.id);
   setTray([]);
@@ -1132,6 +1203,7 @@ if (DEMO) {
   setApps(demoApps());
   // Fake phone notifications through the real message path, for QA.
   for (const [ms, m] of demoNotifs()) setTimeout(() => onMessage(m), ms);
+  onMessage({ t: 'media', pkg: 'com.spotify.music', app: 'Spotify', title: 'Night Drive', artist: 'Demo Band', playing: true, prev: true, next: true });
   void startDemo(forwardFrame, (msg) => showStatus({ s: 'error', text: msg }));
 } else if (!settings.code) {
   showStatus({ s: 'idle', text: 'Not paired' });

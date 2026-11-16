@@ -1,6 +1,7 @@
 package app.tslink.notify
 
 import android.app.Notification
+import android.content.ComponentName
 import android.content.Intent
 import android.os.Build
 import android.provider.Settings
@@ -28,6 +29,7 @@ class Listener : NotificationListenerService() {
     }
 
     private var link: EngineLink? = null
+    private var media: MediaWatch? = null
     /** Car-side id -> notification, for "open" requests. */
     private val tracked = object : LinkedHashMap<String, StatusBarNotification>() {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, StatusBarNotification>) = size > MAX_TRACKED
@@ -41,18 +43,23 @@ class Listener : NotificationListenerService() {
     }
 
     override fun onListenerConnected() {
-        link = EngineLink(this, onConnected = { resync(); sendIcons() }, onMessage = ::fromEngine)
+        link = EngineLink(this, onConnected = { resync(); sendIcons(); media?.resend() }, onMessage = ::fromEngine)
+        media = MediaWatch(this, ComponentName(this, Listener::class.java), ::appLabel) { link?.send(it) }.also { it.watch() }
     }
 
     override fun onListenerDisconnected() {
         // Access turned off: the car must not keep showing what it had.
         link?.send(JSONObject().put("t", "notif-reset"))
+        link?.send(JSONObject().put("t", "media").put("none", true))
+        media?.stop()
+        media = null
         CarSessionNotice.update(this, false)
         link?.close()
         link = null
     }
 
     override fun onDestroy() {
+        media?.stop()
         link?.close()
         super.onDestroy()
     }
@@ -110,6 +117,8 @@ class Listener : NotificationListenerService() {
     /** Engine asks to open a notification on the car display. */
     private fun fromEngine(m: JSONObject) {
         if (m.optString("t") == "session") return CarSessionNotice.update(this, m.optBoolean("up"))
+        // Binder thread: media controls belong on the main thread with the watcher.
+        if (m.optString("t") == "media-cmd") return m.optString("a").let { a -> mainExecutor.execute { media?.command(a) } }
         if (m.optString("t") != "open") return
         val id = m.optString("id")
         val sbn = tracked.remove(id) ?: return

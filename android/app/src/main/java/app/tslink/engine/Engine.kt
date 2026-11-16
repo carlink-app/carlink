@@ -63,6 +63,8 @@ class Engine(
     private var level = 800
     private var apps: Apps.Listing? = null
     /** Notifications still on the phone, re-sent to a car that (re)connects. */
+    /** What plays on the phone now (sanitized `media`), sent again to a car that connects. */
+    private var media: JSONObject? = null
     private val activeNotifs = object : LinkedHashMap<String, Pair<JSONObject, Long>>() {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Pair<JSONObject, Long>>) = size > 10
     }
@@ -176,6 +178,10 @@ class Engine(
                 activeNotifs[it.getString("id")] = it to at
                 if (!quiet) send(it)
             }
+            "media" -> Media.sanitize(m)?.let {
+                media = it.takeUnless { m -> m.optBoolean("none") }
+                send(it)
+            }
             "notif-gone" -> m.optString("id").takeIf { Notif.ID.matches(it) }?.let {
                 activeNotifs.remove(it)
                 send(JSONObject().put("t", "notif-gone").put("id", it))
@@ -268,6 +274,7 @@ class Engine(
                 // Marked as replays: the page skips ones the driver already dismissed.
                 activeNotifs.values.filter { (n, at) -> showNow(n, at, now) }
                     .forEach { send(JSONObject(it.first.toString()).put("replay", true)) }
+                media?.let { send(it) }
             }
             "layout" -> layout(m)
             "apps" -> {
@@ -327,6 +334,10 @@ class Engine(
                 if (m.getString("k") == "back") Input.key(pane.displayId, KeyEvent.KEYCODE_BACK)
             }
             "keyframe" -> panes[m.optInt("pane", 0)]?.requestKeyframe()
+            "media-cmd" -> {
+                val a = m.optString("a")
+                if (a in Media.COMMANDS) toApp?.invoke(JSONObject().put("t", "media-cmd").put("a", a))
+            }
             "notif-open" -> {
                 val id = m.optString("id")
                 val pane = panes[0] ?: return

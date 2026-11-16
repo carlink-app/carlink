@@ -63,6 +63,8 @@ export type PhoneMsg =
   | { t: 'pane'; id: number; w: number; h: number; codec: Codec }
   | { t: 'apps'; list: AppInfo[] }
   | { t: 'app-icons'; list: { pkg: string; ih: string; icon: string }[] }
+  /** What plays on the phone (or `none`). */
+  | { t: 'media'; none?: boolean; pkg?: string; app?: string; title?: string; artist?: string; playing?: boolean; prev?: boolean; next?: boolean; art?: string }
   /** QR pairing: the real pairing code, for the car that showed the QR code. */
   | { t: 'paired'; code: string }
   | { t: 'launched'; pane: number; pkg: string }
@@ -93,6 +95,7 @@ export type PageMsg =
   | { t: 'key'; pane: number; k: 'back' | 'home' }
   | { t: 'keyframe'; pane: number }
   | { t: 'notif-open'; id: string }
+  | { t: 'media-cmd'; a: 'play' | 'pause' | 'next' | 'prev' }
   /** Close one app on the pane, or all of them (removes their tasks; no force-stop). */
   | { t: 'close'; pane: number; pkg: string }
   | { t: 'close-all'; pane: number };
