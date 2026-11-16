@@ -13,3 +13,6 @@ spike/clip.hevc
 .env*
 .idea/
 *.iml
+
+# Claude Code agent worktrees
+.claude/
