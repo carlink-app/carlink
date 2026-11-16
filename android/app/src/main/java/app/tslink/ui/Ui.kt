@@ -32,6 +32,7 @@ class Ui(private val ctx: Context) {
         val OK = Color.parseColor("#81c995")
         val WARN = Color.parseColor("#fdd663")
         val ERR = Color.parseColor("#f28b82")
+        val SELECTED = Color.parseColor("#1f3a5f")
     }
 
     fun dp(v: Int) = (v * ctx.resources.displayMetrics.density).toInt()
@@ -150,9 +151,15 @@ class Ui(private val ctx: Context) {
         for (i in 0 until group.childCount) {
             val b = group.getChildAt(i) as Button
             val on = i == selected
-            b.background = ripple(if (on) rounded(Color.parseColor("#1f3a5f"), 22, ACCENT) else rounded(SURFACE, 22, OUTLINE), 22)
+            b.background = ripple(if (on) rounded(SELECTED, 22, ACCENT) else rounded(SURFACE, 22, OUTLINE), 22)
             b.setTextColor(if (on) ACCENT else TEXT)
         }
+    }
+
+    /** A chosen value (the car) drawn like a selected option; plain when nothing is chosen. */
+    fun styleChoice(v: TextView, selected: Boolean) {
+        v.background = if (selected) rounded(SELECTED, 14, ACCENT) else rounded(SURFACE, 14, OUTLINE)
+        v.setTextColor(if (selected) TEXT else MUTED)
     }
 
     /**

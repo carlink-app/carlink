@@ -70,8 +70,6 @@ class MainActivity : Activity() {
     /** Pair was tapped while TSLink was off: open the scanner once it runs. */
     private var pendingScan = false
 
-    private lateinit var hotspotChoice: LinearLayout
-    private lateinit var hotspotView: TextView
     private lateinit var carName: TextView
     private lateinit var carView: TextView
     private lateinit var carButton: Button
@@ -176,7 +174,7 @@ class MainActivity : Activity() {
         hintView = ui.line().apply { visibility = View.GONE }
         card.addView(hintView)
         // The car can only join the hotspot in car mode: offer it where the user looks.
-        carHotspotButton = ui.button("Turn on car hotspot", primary = false) { setHotspot(car = true) }
+        carHotspotButton = ui.button("Turn on car hotspot", primary = false) { carHotspot() }
         card.addView(carHotspotButton, fullWidth(top = 12))
         primaryButton = ui.button("", primary = true) { onPrimary() }
         card.addView(primaryButton, fullWidth(top = 16))
@@ -238,8 +236,12 @@ class MainActivity : Activity() {
         card.addView(carTextView)
 
         card.addView(ui.text(16f).apply { text = "Start with the car" }, fullWidth(top = 20))
-        carName = ui.text(14f)
-        card.addView(carName)
+        // The chosen car stands out like a selected option.
+        carName = ui.text(17f, bold = true).apply {
+            setPadding(ui.dp(14), ui.dp(10), ui.dp(14), ui.dp(10))
+            compoundDrawablePadding = ui.dp(10)
+        }
+        card.addView(carName, fullWidth(top = 8))
         carView = ui.line()
         card.addView(carView)
         carButton = ui.button("Choose car", primary = false) { chooseCar() }
@@ -248,11 +250,6 @@ class MainActivity : Activity() {
 
     private fun moreCard(parent: LinearLayout) {
         val more = ui.expander(parent, "More")
-        more.addView(ui.text(16f).apply { text = "Hotspot" }, fullWidth(top = 8))
-        hotspotChoice = ui.segmented(listOf("Car hotspot", "Normal hotspot")) { i -> setHotspot(car = i == 0) }
-        more.addView(hotspotChoice, fullWidth(top = 4))
-        hotspotView = ui.line("Car hotspot is what the Tesla browser needs. Normal hotspot: only to switch back.")
-        more.addView(hotspotView)
         more.addView(ui.row("Phone address", Hotspot.PHONE), fullWidth(top = 8))
         more.addView(ui.row("Car page", CAR_PAGE))
 
@@ -448,28 +445,22 @@ class MainActivity : Activity() {
 
     // ---- Hotspot ------------------------------------------------------------
 
-    /** The engine can't report the hotspot mode, so the control shows the last mode set here. */
-    private fun setHotspot(car: Boolean) {
-        if (engine == null) {
-            showHotspot("Start TSLink first.", Ui.WARN)
-            return
-        }
-        showHotspot(if (car) "Switching to car hotspot..." else "Switching to normal hotspot...", Ui.MUTED)
+    /**
+     * The car only joins the hotspot in car mode (fixed address). The engine
+     * can't report the mode, so the button shows what was set from here.
+     */
+    private fun carHotspot() {
+        if (engine == null) return showMessage("Start TSLink first.")
+        showMessage("Turning on the car hotspot...")
         call(onResult = { r ->
             if (r == "ok") {
-                carHotspotOn = car
+                carHotspotOn = true
                 render()
-                ui.selectSegment(hotspotChoice, if (car) 0 else 1)
-                showHotspot(if (car) "Car hotspot is on. Join it from the car, then open the car page." else "Normal hotspot is on.", Ui.OK)
+                showMessage("Car hotspot is on. Join it from the car, then open tslink.app.")
             } else {
-                showHotspot("Hotspot: $r", Ui.ERR)
+                showMessage("error: hotspot: $r")
             }
-        }) { it.carHotspot(car) }
-    }
-
-    private fun showHotspot(s: String, color: Int) {
-        hotspotView.text = s
-        hotspotView.setTextColor(color)
+        }) { it.carHotspot(true) }
     }
 
     // ---- Notifications ------------------------------------------------------
@@ -556,6 +547,7 @@ class MainActivity : Activity() {
     private fun showCar(note: String? = null) {
         val name = Prefs.carName(this)
         carName.text = name ?: "No car chosen"
+        ui.styleChoice(carName, selected = name != null)
         carView.text = note ?: if (name != null) "TSLink and the car hotspot start when the car connects." else "Choose your car so TSLink starts when you get in."
         carView.setTextColor(if (note != null) Ui.WARN else Ui.MUTED)
         carButton.text = if (name != null) "Change car" else "Choose car"
